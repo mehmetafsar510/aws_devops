@@ -1,0 +1,52 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: This template creates an EC2 instance which enables SSH connection. 
+
+Resources:
+  MehmetCFInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0c94855ba95c71c99
+      InstanceType: t2.micro
+      KeyName: the_doctor
+      SecurityGroups:
+        - !Ref ServerSecurityGroup
+        
+      Tags:
+        - Key: Name
+          Value: mehmet-cf-instance
+      UserData: 
+        Fn::Base64: !Sub |
+           #!/bin/bash -xe
+           yum update -y
+           yum install -y httpd.x86_64
+           systemctl start httpd.service
+           systemctl enable httpd.service
+           usermod -a -G apache ec2-user
+           chown -R ec2-user:apache /var/www
+           chmod -R 777 /var/www/html
+           cd /var/www/html/
+           wget https://raw.githubusercontent.com/mehmetafsar510/aws_devops/master/aws/projects/101-kittens-carousel-static-website-ec2/static-web/index.html
+           wget https://github.com/nicholaswyn20/aws-myCV-Repo/raw/master/aws/projects/101-kittens-carousel-static-website-ec2/static-web/cat0.jpg
+           wget https://github.com/nicholaswyn20/aws-myCV-Repo/raw/master/aws/projects/101-kittens-carousel-static-website-ec2/static-web/cat1.jpg
+           wget https://github.com/mehmetafsar510/aws_devops/raw/master/aws/projects/101-kittens-carousel-static-website-ec2/static-web/cat2.jpg
+           systemctl restart httpd
+      
+  ServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to client host
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+        
+  
+      
+
+      
