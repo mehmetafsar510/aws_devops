@@ -16,7 +16,22 @@ while(True):
 			minutes = number // 60000
 			number %= 60000
 			seconds = number // 1000
-			print("{} hour/s {} minute/s {} second/s".format(hour, minutes, seconds))
+			if hour >= 1:
+				if minutes >= 1 and seconds >= 1:
+					print(f"{hour} hour/s {minutes} minute/s {seconds} second/s")
+				elif minutes >= 1 and seconds <1:
+					print(f"{hour} hour/s {minutes} minute/s")
+				elif minutes <1 and seconds >= 1 :
+					print(f"{hour} hour/s {seconds} second/s")
+				else:
+					print(f"{hour} hour/s")
+			elif hour < 1 and minutes >= 1 :
+				if seconds >= 1:
+					print(f"{minutes} minute/s {seconds} second/s")
+				else:
+					print(f"{minutes} minute/s")
+			else:
+				print(f"{seconds} second/s")
 			
 	else:
 		print("Not Valid Input !!")
