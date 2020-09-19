@@ -1,0 +1,63 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: This template creates an EC2 instance which enables SSH connection. 
+
+Parameters:
+  KeyPairNew:
+    Description: This is my key.
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: the_doctor
+
+Resources:
+  MehmetCFInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0c94855ba95c71c99
+      InstanceType: t2.micro
+      KeyName: !Ref KeyPairNew
+      SecurityGroups:
+        - !Ref ServerSecurityGroup
+        
+      Tags:
+        - Key: Name
+          Value: !Sub Web Server of ${AWS::StackName} Stack
+      UserData: 
+        Fn::Base64: !Sub |
+           #!/bin/bash -xe
+           yum update -y
+           yum install python3 -y 
+           pip3 install flask 
+           wget https://github.com/mehmetafsar510/aws_devops/raw/master/aws/projects/app.zip
+           unzip app.zip
+           python3 roman_num_converter.py
+           
+      
+  ServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http and ssh to client host #required
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: KittensSecGroup
+
+
+Outputs:
+  WebsiteURL:
+    Value: !Sub
+      - http://${PublicAddress}
+      - PublicAddress: !GetAtt MehmetCFInstance.PublicDnsName
+    Description: Decimal to Roman Number Converter Application URL
+        
+  
+      
+
+      
