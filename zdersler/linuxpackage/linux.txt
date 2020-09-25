@@ -1,0 +1,52 @@
+1  sudo yum update
+    2  sudo yum search git
+    3  git --version
+    4  yum install git
+    5  sudo yum install git
+    6  sudo yum remove git
+    7  sudo yum install git -y
+    8  sudo yum remove git -y
+    9  git --version
+   10  sudo yum autoremove git
+   11  sudo yum install git -y
+   12  git --version
+   13  sudo yum autoremove git
+   14  git --version
+   15  sudo yum install git -y
+   16  git --version
+   17  sudo yum info git
+   18  sudo yum list
+   19  sudo yum list git
+   20  sudo yum list installed
+   21  sudo yum --showduplicates list git
+   22  git --version
+   23  sudo yum autoremove git -y
+   24  git --version
+   25  sudo yum --showduplicates list git
+   26  sudo yum install git-2.14.5-1.amzn2
+   27  git --version
+   28  sudo yum update git -y
+   29  git --version
+   30  sudo yum --showduplicates list git
+   31  git --version
+   32  sudo yum autoremove git -y
+   33  git --version
+   34  sudo yum --showduplicates list git
+   35  sudo yum install git-2.14.4-1.amzn2.0.1
+   36  sudo yum --showduplicates list git
+   37  git --version
+   38  sudo yum update git -y
+   39  git --version
+   40  sudo yum --showduplicates list git
+   41  sudo yum update
+   42  sudo yum list installed http*
+   43  sudo yum list http*
+   44  sudo yum install httpd -y
+   45  sudo yum list installed http*
+   46  sudo yum remove httpd -y
+   47  sudo yum list installed http*
+   48  sudo yum install httpd -y
+   49  sudo yum list installed http*
+   50  sudo yum autoremove httpd -y
+   51  sudo yum list installed http*
+   52  history

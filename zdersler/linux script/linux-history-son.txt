@@ -1,0 +1,148 @@
+#!/bin/bash
+number=10
+let new_number=number++
+echo "Number: $number"
+echo "N.Num: $new_number"
+sayi=10
+let yenisayi=--sayi
+echo $sayi
+echo $yenisayi
+
+---------------------------------
+
+#!/bin/bash
+number=10
+let new_number=number++
+echo "Number: $number"
+echo "N.Num: $new_number"
+sayi=10
+let yenisayi=--sayi
+echo $sayi
+echo $yenisayi
+[ec2-user@ip-172-31-92-34 ~]$ ^C
+[ec2-user@ip-172-31-92-34 ~]$ cat exer.sh
+#!/bin/bash
+read -p "first number: " num1
+read -p "second number: " num2
+let total=num1+num2
+echo $(( total++ ))
+echo $total
+echo $(( total - num1 ))
+
+---------------------------------------------------
+
+cat exer2.sh
+#!/bin/bash
+read -p "kaç yaşındasın? " age
+if [ $age -ge 16 ]
+then
+        echo "araba sürebilirsin."
+elif [ $age -eq 15 ]
+then
+        echo "önümüzdeki yıl sürebilirsin"
+else
+        echo "araba süremezsin"
+fi
+[ec2-user@ip-172-31-92-34 ~]$ cat exer2.sh
+
+-------------------------------------------------
+
+#!/bin/bash
+read -p "kaç yaşındasın? " age
+if [ $age -ge 16 ]
+then
+        echo "araba sürebilirsin."
+elif [ $age -eq 15 ]
+then
+        echo "önümüzdeki yıl sürebilirsin"
+else
+        echo "araba süremezsin"
+fi
+
+-------------------------------------------------
+
+cat exer3.sh
+#!/bin/bash
+read -p "kaç yaşındasın? " age
+if (( age >= 16 ))
+then
+        echo "araba sürebilirsin."
+elif [ $age -eq 15 ]
+then
+        echo "önümüzdeki yıl sürebilirsin"
+else
+        echo "araba süremezsin"
+fi
+
+-------------------------------------------------
+
+cat log.sh
+#!/bin/bash
+read -p "enter number 1: " n1
+read -p "enter number 2: " n2
+read -p "enter number 3: " n3
+if (( (( n2 > n1 )) && (( n2 < n3 )) ))
+then
+        echo "$n2 is between $n1 and $n3"
+elif (( (( n1 > n2 )) || (( n3 < n2 )) ))
+then
+        echo "$n2 is out of range"
+fi
+
+--------------------------------------------------
+
+cat calculate.sh
+#!/bin/bash
+base_value=5
+read -p "Enter a number: " user_input
+total=$((base_value+user_input))
+echo "Total value is: $total"
+
+-----------------------------------------------------
+
+#!/bin/bash
+echo "Hello World"
+date
+echo "more then enough"
+
+------------------------------------------------------
+
+cat mycopy.sh
+#!/bin/bash
+cp $1 $2
+echo kopyalanan dosya detayları $2
+ls -lh $2
+
+--------------------------------------------------------
+
+#!/bin/bash
+read -p "Enter your name: " name
+read -p "Enter your age: " age
+read -p "Enter Avarege Life Expectancy: " ale
+if (( age < 18 ))
+then
+        echo "$name you must be a student"
+        echo "at least $(( 18 - age )) years to become a worker"
+elif (( (( age >= 18 )) && (( age < 65 )) ))
+then
+        echo "$name you must be a worker."
+        echo "$(( 65 - age )) years to retire."
+elif (( age >= 65 ))
+then
+        if (( age < ale ))
+        then
+                echo "Retired"
+                echo "$(( ale - age )) year to DIE"
+        else
+                echo -ne '\007'
+                echo "!!!!! Already DIED !!!!!"
+                sleep 3
+                echo -ne '\007'
+                echo "!!!!! Already DIED !!!!!"
+                sleep 3
+                echo "!!!!! Already DIED !!!!!"
+                echo -ne '\007'
+        fi
+fi
+
+----------------------------------------------------------------

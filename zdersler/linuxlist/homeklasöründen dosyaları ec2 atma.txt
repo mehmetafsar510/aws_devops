@@ -1,0 +1,1 @@
+scp -i "the_doctor.pem" -r linusfiltertekrar ec2-user@ec2-54-196-98-45.compute-1.amazonaws.com:/home/ec2-user

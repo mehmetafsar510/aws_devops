@@ -1,0 +1,99 @@
+ ls -l
+  154  cat days.txt
+  155  cat days.txt | cat | cat | cat
+  156  ls
+  157  cat count.txt
+  158  pwd
+  159  ls
+  160  cat > dosyaadi
+  161  ls
+  162  cat dosyaadi
+  163  rm dosyaadi
+  164  ls
+  165  ls count.txt
+  166  cat count.txt
+  167  tac count.txt | tee temp.txt | tac
+  168  ls
+  169  cat temp.txt
+  170  ls -l | tee dosyalarimiz.txt | less
+  171  ls
+  172  cat dosyalarimiz.txt
+  173  rm dosyalarimiz.txt temp.txt
+  174  ls
+  175  cat tennis.txt
+  176  cat > ttttttt
+  177  ls
+  178  ls  -l
+  179  more ttttttt
+  180  cat tennis.txt | grep Uni*
+  181  cat tennis.txt | grep April
+  182  ls -l
+  183  ls -l | cut -d' ' -f3
+  184  ls -l | cut -d' ' -f1
+  185  ls -l | cut -d' ' -f5
+  186  ls -l
+  187  ls -l | cut -d' ' -f9
+  188  ls -l | cut -d' ' -f11
+  189  ls
+  190  cat tennis.txt
+  191  cat tennis.txt | cut -d' ' -f1
+  192  cat tennis.txt | cut -d' ' -f3
+  193  cat /etc/passwd
+  194  cut -d: -f1 /etc/passwd
+  195  echo "DERS BAŞLANGICI: 20.00 (tr
+  196  echo "DERS BAŞLANGICI 20.00"
+  197  LS
+  198  ls
+  199  cat clarusway.txt
+  200  cat countries.csv
+  201  cat count.txt
+  202  cat days.txt
+  203  ls
+  204  cat file1
+  205  cat file2
+  206  ls
+  207  cat list1.txt
+  208  cat list2.txt
+  209  cat marks.txt
+  210  cat to_build_a_fire.txt
+  211  ls
+  212  cat trainees.txt
+  213  cat ttttttt
+  214  ls
+  215  rm ttttttt
+  216  ls -l
+  217  cat clarusway.txt
+  218  cat clarusway.txt | tr aer QAZ
+  219  cat count.txt | tr '\n' ' '
+  220  cat clarusway.txt | tr -d a
+  221  cat clarusway.txt | tr -d aoieu
+  222  cat clarusway.txt | tr [a-z] [A-Z]
+  223  wc count.txt
+  224  wc -l /etc/passwd
+  225  ls
+  226  sort marks.txt
+  227  sort -r marks.txt
+  228  cat trainees.txt
+  229  sort trainees.txt
+  230  uniq marks.txt
+  231  uniq trainees.txt
+  232  sort trainees.txt | uniq
+  233  cat file1
+  234  cat file2
+  235  comm file1 file2
+  236  ls
+  237  comm list1.txt list2.txt
+  238  ls
+  239  cat count
+  240  cat countries.csv
+  241  cut -d',' -f3 countries.csv
+  242  cut -d',' -f3 countries.csv | tail -4
+  243  cut -d',' -f3 countries.csv | tail -4 | sort
+  244  cut -d',' -f3 countries.csv | tail -4 | sort | uniq
+  245  cut -d',' -f3 countries.csv | tail -4 | sort | uniq | tee continents.txt
+  246  ls
+  247  cat continents.txt
+  248  cut -d',' -f3 countries.csv | tail -4 | sort | uniq > continents2.txt
+  249  ls
+  250  cat continents2.txt
+  251  history

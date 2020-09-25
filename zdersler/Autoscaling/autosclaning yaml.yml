@@ -1,0 +1,127 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: This template creates an EC2 instance to run a static website application deployed with Apache Web Server
+
+Parameters:
+  VPC:
+    Type: AWS::EC2::VPC::Id
+    Description: Choose which VPC the Application Load Balancer should be deployed to
+  
+  Subnets:
+    Description: Choose which subnets the Application Load Balancer should be deployed to
+    Type: List<AWS::EC2::Subnet::Id>
+  
+  SecurityGroup:
+    Description: Select the Security Group to apply to the Application Load Balancer
+    Type: AWS::EC2::SecurityGroup::Id
+
+Resources:
+  
+  ALBTargetGroup:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+    Properties:
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /
+      HealthCheckPort: traffic-port
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      Name: MyTargetGroupCF
+      Port: 80
+      Protocol: HTTP
+      Tags:
+        - Key: Name
+          Value: MyTargetGroupCF
+      UnhealthyThresholdCount: 3
+      VpcId: !Ref VPC
+
+  ALBLoadBalancer:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+      IpAddressType: ipv4
+      Name: MyALBforAutoScalingCF
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref SecurityGroup
+      Subnets: !Ref Subnets
+      Tags:
+        - Key: Name
+          Value: MyALBforAutoScalingCF     
+      Type: application
+
+  ALBListener:
+      Type: AWS::ElasticLoadBalancingV2::Listener
+      Properties:
+        LoadBalancerArn: !Ref ALBLoadBalancer
+        Port: 80
+        Protocol: HTTP
+        DefaultActions:
+          - Type: forward
+            TargetGroupArn: !Ref ALBTargetGroup
+
+  ALBLaunchConfig:
+    Type: "AWS::AutoScaling::LaunchConfiguration"
+    Properties:      
+      ImageId: ami-0c94855ba95c71c99
+      InstanceType: t2.micro
+      KeyName: baris
+      LaunchConfigurationName: First-Launch-Config
+      SecurityGroups:
+        - !Ref SecurityGroup
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+
+            #update os
+            yum update -y
+            #install epel
+            amazon-linux-extras install epel -y
+            #install stress tool
+            yum install -y stress
+            #install apache server
+            yum install -y httpd
+            # get private ip address of ec2 instance using instance metadata
+            TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"` \
+            && PRIVATE_IP=`curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4`
+            # get public ip address of ec2 instance using instance metadata
+            TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"` \
+            && PUBLIC_IP=`curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4`
+            # get date and time of server
+            DATE_TIME=`date`
+            # set all permissions
+            chmod -R 777 /var/www/html
+            # create a custom index.html file
+            echo "<html>
+            <head>
+                <title> Application Load Balancer</title>
+            </head>
+            <body>
+                <h1>Testing Application Load Balancer</h1>
+                <p>This web server is launched from the launch configuration by YOUR_NAME</p>
+                <p>This instance is created at <b>$DATE_TIME</b></p>
+                <p>Private IP address of this instance is <b>$PRIVATE_IP</b></p>
+                <p>Public IP address of this instance is <b>$PUBLIC_IP</b></p>
+            </body>
+            </html>" > /var/www/html/index.html
+            # start apache server
+            systemctl start httpd
+            systemctl enable httpd
+  
+  ALBAutoScaling:
+    Type: "AWS::AutoScaling::AutoScalingGroup"
+    Properties:
+      AutoScalingGroupName: First-AS-Group-CF
+      DesiredCapacity: 1
+      HealthCheckGracePeriod: 200
+      HealthCheckType: ELB
+      LaunchConfigurationName: !Ref ALBLaunchConfig
+      MaxSize: 1
+      MinSize: 1
+      Tags:
+        - Key: Name
+          PropagateAtLaunch: true
+          Value: Autoscaling
+      TargetGroupARNs:
+        - !Ref ALBTargetGroup
+      VPCZoneIdentifier: !Ref Subnets

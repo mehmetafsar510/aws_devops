@@ -1,0 +1,31 @@
+; --- bir satırda birden çok komut çalıştırmaya yarar.
+cat days.txt ; cat count.txt
+
+
+& --- shell normalde tek işlem yaparken & işareti ile aynı teminalde birden çok işlemi aynı anda yapabiliriz ve işlem bittiğinde bilgi verir.
+sleep 5 &
+
+
+sleep 5 --- shell 5 sn bekler 
+
+
+$? --- sıfırdan farklı bir değer gelirse anlamalıyız ki son girdiğimiz komut hatalıdır.
+echo $?
+
+
+&& --- Logical AND olarak kullanılır. İki komutu && ile ayırırsak ilk komut çalıştıysa ikinci çalışır aksi halde çalışmaz.
+cat file1.txt && cat file2.txt --- file1 eğer varsa ikinci komuta geçer aksi halde ikinci komut çalışmaz.
+
+
+|| --- Logical AND olarak kullanılır. Eğer ilk komut çalışmazsa ikinciyi çalıştır. çalışırsa sadece birinci çalışır.
+echo first || echo second ; echo third ---- fist ve third çıktısı verir.
+zecho first || echo second ; echo third ----second ve third çıktısı verir.
+rm file11 && echo it worked || echo it failed
+
+
+# --- comment satırı için kullanılır. komuta etki etmez.
+echo merhaba #bu satır yorum içindir.
+
+
+\ --- escape sequence karakteridir. ayrıca bu karakter ile komutları satırlara ayırabiliriz.
+
