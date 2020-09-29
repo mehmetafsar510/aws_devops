@@ -1,0 +1,147 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: |
+  CloudFormation Template for Miliseconds Converter Website on EC2.
+  This template deploys Miliseconds Converter Static Website on Amazon Linux 2
+  (ami-09d95fab7fff3776c) EC2 Instance with custom security group 
+  allowing http connections on port 80. Miliseconds Converter Static Website 
+  is downloaded from Github repository, then deployed on Python Flask Web Application.
+  Application Load Balancer with Auto Scaling Group of Amazon Linux 2 EC2 Instances within default VPC. 
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VpcId of your existing Virtual Private Cloud (VPC)
+  Subnets:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: The list of SubnetIds in your Virtual Private Cloud (VPC)
+  InstanceType:
+    Description: WebServer EC2 instance type
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - t1.micro
+      - m1.small
+      - m1.medium
+      - m1.large
+    ConstraintDescription: must be a valid EC2 instance type.
+  KeyName:
+    Description: The EC2 Key Pair to allow SSH access to the instances
+    Type: AWS::EC2::KeyPair::KeyName
+  PolicyTargetValue:
+    Description: Please enter your Target value that triggers the Autoscaling
+    Default: '60'
+    Type: String
+  
+Mappings:
+  RegionImageMap:
+    us-east-1:
+      AMI: ami-0c94855ba95c71c99
+    us-east-2:
+      AMI: ami-0603cbe34fd08cb81
+    us-west-1:
+      AMI: ami-0e65ed16c9bf1abc7
+    us-west-2:
+      AMI: ami-0841edc20334f9287
+    eu-west-1:
+      AMI: ami-08a2aed6e0a6f9c7d
+Resources:
+ 
+  myAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AvailabilityZones: !GetAZs 
+      LaunchConfigurationName: !Ref myLaunchConfig
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 90
+      DesiredCapacity: '2'
+      MinSize: '1'
+      MaxSize: '3'
+      TargetGroupARNs:
+        - !Ref myALBTargetGroup
+  
+  myLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      KeyName: !Ref KeyName
+      ImageId: !FindInMap 
+        - RegionImageMap
+        - !Ref AWS::Region
+        - AMI
+      UserData: !Base64 |
+          #!/bin/bash -xe
+          yum update -y
+          yum install python3 -y 
+          pip3 install flask 
+          wget https://github.com/mehmetafsar510/aws_devops/raw/master/aws/projects/002-milliseconds-converter/002-milliseconds-converter.zip
+          unzip 002-milliseconds-converter.zip
+          python3 miliseconds_converter1.py
+      SecurityGroups:
+        - !Ref mySecurityGroup
+      InstanceType: !Ref InstanceType
+  
+  myCPUPolicy:
+    Type: "AWS::AutoScaling::ScalingPolicy"
+    Properties:
+      AutoScalingGroupName: !Ref myAutoScalingGroup
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: !Ref PolicyTargetValue
+  
+
+  myApplicationLoadBalancer:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+      SecurityGroups:
+        - !GetAtt mySecurityGroup.GroupId
+      Subnets: !Ref Subnets
+       
+  
+
+  myALBListener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties:
+      DefaultActions: 
+        - Type: forward
+          TargetGroupArn: !Ref myALBTargetGroup
+      LoadBalancerArn: !Ref myApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+  
+  
+  myALBTargetGroup:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+    Properties:
+      HealthCheckIntervalSeconds: 25
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 3
+      VpcId: !Ref VpcId
+  
+  
+  mySecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: Enables SSH and HTTP
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          
+    
+  
+Outputs:
+  URL:
+    Description: The URL of the website
+    Value: !Join 
+      - ''
+      - - 'http://'
+        - !GetAtt myApplicationLoadBalancer.DNSName
