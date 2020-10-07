@@ -1,0 +1,54 @@
+volume oluþurduk(ayný bölgede!!)
+volumu asýl volumuza attach ettik(region ayný olacak dikkat!)
+volumu formatladýk
+volumu oluþturdugumuz klasöre mount ettik
+
+volum arttýrdýk resize ettik
+
+
+
+sudo file -s /dev/xvdf(oluþturdugumuz volumun formatýna bakýyoruz)
+
+sudo mkfs -t ext4 /dev/xvdf(volumu formatladýk)
+
+sudo mkdir /mnt/2nd-vol/(mount bölümüne klasör oluþturduk)
+
+sudo mount /dev/xvdf /mnt/2nd-vol/(oluþturdugumuz klasöre mount ettik)
+
+df -h(hangi volumu ne kadar kullandýýmýzý nereye baðlý olduðunu)
+
+sudo resize2fs /dev/xvdf((2 den 4 yaptýk)volumu arttýrdýktan sonra sistem görsün diye resize ediyoruz)
+
+sudo fdisk -l(hali hazýrdaki disklerin formation durumlarýný görmek)
+
+sudo fdisk /dev/xvdg((mounttan önce bölüyotuz)diskimizi bölümlere ayýrmak istiyoruz)
+
+(cýkan menu de n ve p ile partiona baþlýyoruz)
+
+sudo mkfs -t ext4 /dev/xvdg1(partitionlara ayýrdýðýmýz ilk kýsmý formatladýk)
+
+sudo mkfs -t ext4 /dev/xvdg2(partitionlara ayýrdýðýmýz ikinci kýsmý formatladýk)
+
+sudo growpart /dev/xvdg 2(volumu sistemde geniþletiyoruz)
+
+sudo reboot now(ec2 reboot ediyoruz)
+
+Eðer sistemi reboot ettikten sonra kaybolmasýný istemiyorsak---
+
+cd /etc----sonra sudo nano fstab ile içine girip içerisine**
+
+UUID=c4a7b168-d67a-4e0f-9a50-8518fb8c45a5     /           xfs    defaults,noatime  $
+/dev/xvdf             /mnt/2nd-vol        ext4      defaults,nofail    0     0
+/dev/xvdgl             /mnt/3rd-vol-part1        ext4      defaults,nofail    0    $
+/dev/xvdg2             /mnt/3rd-vol-part2        ext4      defaults,nofail    0    $
+
+bu þekilde yazýyoruz.
+
+Böylece otomatik olarak mouth ediyor.
+
+
+
+
+
+
+

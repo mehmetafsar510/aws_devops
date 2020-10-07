@@ -1,0 +1,77 @@
+Exercise 3:
+#!/bin/bash
+username=$(whoami)
+if [ $1 ]
+then
+        username=$1
+fi
+description=$(cat /etc/passwd | grep $username | cut -d":" -f5)
+if [ "$description" != "" ]
+then
+echo "Description of $username is $description"
+else
+echo "No description for user $username"
+fi
+sudo useradd hr -c “Human Resources Section”
+sudo useradd tech -c “Technical Stuff”
+sudo useradd aws
+**************
+#!/bin/bash
+username=$(whoami)
+if [ $1 ]
+then
+        username=$1
+fi
+description=$(cat /etc/passwd | grep $username | cut -d":" -f5)
+if [ "$description" != "" ]
+then
+echo "Description of $username is $description"
+else
+echo "No description for user $username"
+fi
+get_password $username    #bu bizim önceki alýþtýrmada oluþturduðumuz script. burada doðrudan çaðýrýyoruz.
+------------------------------------------------------------------
+exercise 4:
+if [ $1 ]
+then
+        cd $1
+fi
+number=1
+for FILE in *.csv
+do
+        mv $FILE $number-$FILE
+        let number++
+done
+mkdir new
+touch test.csv sec.csv third.csv test.txt
+---------------------------------------------------------------------
+exercise 5:
+function file_count()
+{
+local Directory=$1
+COUNT_FILE=$(ls $Directory|wc -l)
+echo "$Directory - $COUNT_FILE"
+}
+file_count /etc
+file_count ~
+file_count /usr/bin
+
+-------------------------------------------------------------
+exercise(password.css) 
+cat > password.css
+User,Password
+finance,xJ2a_Pl1
+tech,Qc8r7!2P
+hr,l30o_2mM
+operation,12345678
+marketing,qwertyui
+sales,abcdefgh
+
+vim script.sh
+#!/bin/bash/
+
+userpassword=$(cat password.csv | grep $1 | cut -d',' -f2)
+
+echo "password for $1: $userpassword "
+
+./script.sh hr

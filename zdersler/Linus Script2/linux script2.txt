@@ -1,0 +1,190 @@
+#!/bin/bash
+
+for number in {1..10}
+do
+        echo "Number: $number"
+done
+-----------------------------
+
+#!/bin/bash
+
+for number in {1..100..7}
+do
+        echo "Number: $number"
+done
+------------------------------------
+#!/bin/bash
+
+for name in yusuf veysel mustafa ozan
+do
+        echo "Hello $name"
+done
+-----------------------------------
+#!/bin/bash
+
+for ((i = 1 ; i <= 10; i++))
+do
+        echo "Thx $i"
+done
+--------------------------------
+Ýnfinite loop
+
+#!/bin/bash
+
+for ((i = 1 ; i <= 10; i++))
+do
+        echo "Number is: $i"
+        let i = 1
+done
+------------------------------------
+exercise1
+#!/bin/bash
+sum=0
+for (( i = 1; i < 25; i++))
+do
+        let sum+=$i
+        echo "sayac: $i   toplam:$sum"
+
+done
+
+---------------------------------------
+exercise2
+#!/bin/bash
+
+
+read -p " Enter multiple names: " names
+for name in $names;
+do
+
+        echo "Hello : $name"
+
+done
+
+--------------------------------------------
+
+#!/bin/bash
+
+
+getdate() {
+        date
+        return
+}
+getdate
+
+name="Mehmet"
+
+localvariabletes() {
+        local name = "Ahmet"
+
+
+}
+localvariabletes
+echo "$name"
+
+--------------------------------------------------
+#!/bin/bash
+
+
+getdate() {
+        date
+        return
+}
+getdate
+
+
+localvariabletes() {
+        local name2="Ahmet"
+        echo "fonksiyon içinde name2: $name2 "
+        echo "fonksiyon içinde name1: $name1 "
+        return
+
+}
+
+name1="veysel"
+
+localvariabletes
+
+echo "---------------------------------------"
+echo "name1: $name1"
+echo "name2: $name2"
+-------------------------------------------------------
+
+#!/bin/bash
+
+function topla() {
+        echo "Total $(($1 + $2))"
+
+}
+
+topla 5 8
+
+----------------------------------------------------------
+exercise 3
+#!/bin/bash
+
+function age(){
+        local birthyear
+        read -p "enter your birthday: " birthyear
+        age=0
+        let age=$1-$birtyear
+        echo $age
+}
+
+age 2020
+
+----------------------------------------------------------------
+#!/bin/bash
+
+for f in $(ls /var/ ); do
+        echo $f
+done
+--------------------------------------------------------------------
+#!/bin/bash
+
+myblock=$(cat << END
+this text
+prints on
+many times
+END
+)
+
+echo $myblock
+----------------------------------------------------------------------
+
+#!/bin/bash
+
+number=2227
+
+python -c "print($number)"
+---------------------------------------------------------------------
+#!/bin/bash
+
+num1=2227
+num2=3333
+
+code=$(cat<<ENT
+print($num1)
+print($num2)
+print($num1+$num2)
+ENT
+)
+
+python -c "$code"
+python -c "print($num1+$num2)"
+----------------------------------------------------------------------
+#!/bin/bash
+END_VALUE=10
+PYTHON_CODE=$(cat << _END_
+# Python code starts here...
+import math
+for i in range($END_VALUE):
+   print(i, math.sqrt(i))
+# Python code ends here.
+_END_
+)
+res="$(python3 -c "$PYTHON_CODE")"
+echo "$res"
+
+---------------------------------------------------------------------
+python3 -c “./mycode.py”
+
