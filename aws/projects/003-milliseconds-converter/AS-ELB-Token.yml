@@ -1,0 +1,116 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: >
+  CloudFormation Template for Milliseconds Converter Application. This template creates Application Load Balancer 
+  with Auto Scaling Group of Amazon Linux 2 (ami-0947d2ba12ee1ff75) EC2 Instances which host Python Flask Web Application.
+  EC2 instances are placed within WebServerSecurityGroup which allows http (80) connections only from ALBSecurityGroup,
+  and Application Load Balancer is placed within ALBSecurityGroup which allows http (80) connections from anywhere.
+  WebServerASG Auto Scaling Group is using the WebServerLT Launch Template in order to spin up instances needed, 
+  and WebServerLT Launch Template is configured to prepare Python Flask environment on EC2,
+  and to deploy Milliseconds Converter Application on Flask Server after downloading the app code from Github repository.
+
+Resources:
+  WebServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP for Flask Web Server
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !GetAtt ALBSecurityGroup.GroupId
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP for Application Load Balancer
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+  WebServerLT:
+    Type: AWS::EC2::LaunchTemplate
+    Properties: 
+      LaunchTemplateData:
+        ImageId: ami-0947d2ba12ee1ff75 
+        InstanceType: t2.micro
+        KeyName: blueman
+        SecurityGroupIds: 
+          - !GetAtt WebServerSecurityGroup.GroupId
+        TagSpecifications: 
+          - ResourceType: instance
+            Tags: 
+              - Key: Name
+                Value: !Sub Web Server of ${AWS::StackName} Stack 
+        UserData:
+          Fn::Base64: 
+            !Sub |
+              #! /bin/bash
+              yum update -y
+              yum install python3 -y
+              pip3 install flask
+              TOKEN="20ead045838bf426ee4b3dacc1b8670f1635f6a4"
+              FOLDER="https://$TOKEN@raw.githubusercontent.com/springbluebay/EU-clarusway-aws-devops-4-20/master/aws/projects/002-milliseconds-converter/"
+              curl -s --create-dirs -o "/home/ec2-user/templates/index.html" -L "$FOLDER"templates/index.html
+              curl -s --create-dirs -o "/home/ec2-user/templates/result.html" -L "$FOLDER"templates/result.html
+              curl -s --create-dirs -o "/home/ec2-user/milliseconds-converter-app.py" -L "$FOLDER"milliseconds-converter-app.py
+              python3 /home/ec2-user/milliseconds-converter-app.py
+  WebServerTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties: 
+      Port: 80
+      Protocol: HTTP
+      TargetType: instance
+      VpcId: !GetAtt WebServerSecurityGroup.VpcId
+
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      Scheme: internet-facing
+      SecurityGroups: 
+        - !GetAtt ALBSecurityGroup.GroupId
+      Subnets:
+        - subnet-8e7186af
+        - subnet-8017e2df
+        - subnet-e0ad91de
+        - subnet-ddb65ebb
+        - subnet-8e5ee6c3
+        - subnet-478c2e49
+      Type: application
+  
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties: 
+      DefaultActions: 
+        - TargetGroupArn: !Ref WebServerTG
+          Type: forward
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      
+  WebServerASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties: 
+      AvailabilityZones: 
+        !GetAZs ""
+      DesiredCapacity: 2
+      HealthCheckGracePeriod: 90
+      HealthCheckType: ELB
+      LaunchTemplate: 
+        LaunchTemplateId: !Ref WebServerLT
+        Version: !GetAtt WebServerLT.LatestVersionNumber 
+      MaxSize: 3
+      MinSize: 1
+      TargetGroupARNs: 
+        - !Ref WebServerTG
+Outputs:
+  WebsiteURL:
+    Value: !Sub 
+      - http://${ALBAddress}
+      - ALBAddress: !GetAtt ApplicationLoadBalancer.DNSName
+    Description: Milliseconds Converter Application Load Balancer URL
