@@ -1,0 +1,46 @@
+
+software tester
+
+Username: mbal13759
+Password: 1X2svz035n6N24u2
+Registration Code: wssin+5UKF2C
+
+Username: odur13692
+Password: 709zU493cvl2F82R
+Registration Code: wssin+5UKF2C
+
+
+
+
+1376496768
+1376496769
+
+
+
+
+
+
+
+
+
+1561772847       (fail)5/15(fail)(There is not a Analitic Workbench Menu in Data Design Menu.)
+1561772853       (pass)17/17(PASS)
+1561772854       (pass)13/13(PASS)
+1561772855       (pass)18/18(pass)kolay
+1561772856       (fail)12/13(There ýs no thýrd date ....ýn the menu.)
+
+
+
+
+----------------------------
+
+
+|||:Pre-condition Item|:Pre-condition information|:Reference links|
+|| Environment |Sensage Testing Environment|https://se7-single.sensage.aureacentral.com:28095/analyzer|  
+|| User credentials |Username: admin Password: changeme|N/A|
+|| System settings |Use a supported browser: Chrome|N/A|
+|| Application configuration |N/A|N/A|  
+|| Data prerequisites |Sign-in to Sensage Testing Environment using admin user login credentials|N/A| 
+
+
+  

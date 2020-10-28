@@ -1,0 +1,23 @@
+version: '3'
+services:
+  app:
+    image: mehmetafsar510/bookstore-api:1.0
+    container_name: python
+    volumes:
+      - .:/app
+    ports:
+      - 80:80
+    depends_on:
+      - database
+
+  database:
+    image: mysql:5.7
+    container_name: mysql
+    restart: always
+    ports:
+      - 3306:3306
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=bookstore_db
+      - MYSQL_USER=clarusway
+      - MYSQL_PASSWORD=password
