@@ -1,4 +1,4 @@
-version: '3'
+version: "3.7"
 services:
   
   database:
@@ -15,12 +15,13 @@ services:
 
   app:
     image: mehmetafsar510/bookstore-api:latest
+    restart: always
     ports:
-      - 80:80
+      - "80:80"
     depends_on:
       - database
     networks:
       - juiletnet
 networks:
-    juiletnet:
-        driver: bridge
+  juiletnet:
+    driver: bridge
