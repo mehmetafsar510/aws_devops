@@ -3,4 +3,5 @@ COPY . /app
 WORKDIR /app
 RUN pip install -r requirements.txt
 EXPOSE 80
-CMD python ./app.py 
+ENTRYPOINT ["python"]
+CMD ["bookstore-api.py"] 
