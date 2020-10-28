@@ -1,7 +1,7 @@
 version: '3'
 services:
   app:
-    image: mehmetafsar510/bookstore-api:latest
+    build: .
     container_name: python
     volumes:
       - .:/app
@@ -9,6 +9,8 @@ services:
       - 80:80
     depends_on:
       - database
+    networks:
+      - clarusnet
 
   database:
     image: mysql:5.7
@@ -21,3 +23,8 @@ services:
       - MYSQL_DATABASE=bookstore_db
       - MYSQL_USER=clarusway
       - MYSQL_PASSWORD=password
+    networks:
+      - clarusnet
+networks:
+    clarusnet:
+        driver: bridge
