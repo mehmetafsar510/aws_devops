@@ -1,7 +1,7 @@
 version: '3'
 services:
   app:
-    image: mehmetafsar510/bookstore-api:1.0
+    image: mehmetafsar510/bookstore-api:latest
     container_name: python
     volumes:
       - .:/app
