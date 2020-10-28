@@ -17,10 +17,10 @@ services:
     ports:
       - 3306:3306
     environment:
-      - MYSQL_ROOT_PASSWORD: root
-      - MYSQL_DATABASE: bookstore_db
-      - MYSQL_USER: clarusway
-      - MYSQL_PASSWORD: Clarusway_1
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=bookstore_db
+      - MYSQL_USER=clarusway
+      - MYSQL_PASSWORD=Clarusway_1
     networks:
       - clarusnet
 networks:
