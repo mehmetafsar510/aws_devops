@@ -5,8 +5,6 @@ services:
     image: mysql:5.7
     container_name: database
     restart: always
-    secrets:
-      - database-password
     volumes:
       - database-data:/var/lib/mysql
     environment:
@@ -28,10 +26,6 @@ services:
       - juiletnet
 volumes:
   database-data:
-
-secrets:
-  database-password:
-    file: database/password.txt
 
 networks:
   juiletnet:
