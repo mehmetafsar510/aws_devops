@@ -30,7 +30,7 @@ volumes:
   database-data:
 
 secrets:
-  db-password:
+  database-password:
     file: database/password.txt
 
 networks:
