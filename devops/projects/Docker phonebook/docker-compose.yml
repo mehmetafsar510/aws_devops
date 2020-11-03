@@ -5,6 +5,10 @@ services:
     image: mysql:5.7
     container_name: database
     restart: always
+    secrets:
+      - database-password
+    volumes:
+      - database-data:/var/lib/mysql
     environment:
       - MYSQL_ROOT_PASSWORD=root
       - MYSQL_DATABASE=phonebook
@@ -22,6 +26,13 @@ services:
       - database
     networks:
       - juiletnet
+volumes:
+  database-data:
+
+secrets:
+  db-password:
+    file: database/password.txt
+
 networks:
   juiletnet:
     driver: bridge
