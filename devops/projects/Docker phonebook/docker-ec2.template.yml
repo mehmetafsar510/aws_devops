@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: This template creates an EC2 instance which enables SSH and HTTP connection. 
+
+Resources:
+  DockerEC2:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      ImageId: ami-0947d2ba12ee1ff75
+      InstanceType: t2.micro
+      KeyName: the_doctor
+      SecurityGroups: 
+        - !Ref DockerInstanceSecGrp
+      Tags:
+        - Key: Name 
+          Value: DockerInstance
+      UserData:
+        Fn::Base64:
+          !Sub | 
+            #! /bin/bash
+            yum update -y
+            amazon-linux-extras install docker -y 
+            systemctl start docker
+            systemctl enable docker 
+            usermod -a -G docker ec2-user
+            curl -L "https://github.com/docker/compose/releases/download/1.25.4/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+            chmod +x /usr/local/bin/docker-compose       
+            cd /home/ec2-user
+            mkdir phonebook
+            cd phonebook
+            wget https://raw.githubusercontent.com/mehmetafsar510/aws_devops/master/devops/projects/proje/Dockerfile
+            wget https://raw.githubusercontent.com/mehmetafsar510/aws_devops/master/devops/projects/proje/bookstore-api.py
+            wget https://raw.githubusercontent.com/mehmetafsar510/aws_devops/master/devops/projects/proje/docker-compose.yml
+            wget https://raw.githubusercontent.com/mehmetafsar510/aws_devops/master/devops/projects/proje/requirements.txt
+            cd /home/ec2-user/phonebook
+            docker build -t mehmetafsar510/bookstore-api:latest .
+            docker-compose up -d
+            
+  DockerInstanceSecGrp:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: Allow Http and SSH port from anywhere #required
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80 
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22 
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+Outputs:
+  WebsiteURL:
+    Description: Bookstore Api Web URL 
+    Value: !Sub 
+      - http://${PublicAddress}
+      - PublicAddress: !GetAtt DockerEC2.PublicDnsName
+  
+
+
