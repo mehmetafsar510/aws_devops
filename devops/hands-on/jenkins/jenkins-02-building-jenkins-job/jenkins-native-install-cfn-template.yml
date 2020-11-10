@@ -55,6 +55,15 @@ Resources:
           systemctl enable jenkins
           yum install git -y
 
+          cd /opt
+          wget https://downloads.apache.org/maven/maven-3/3.6.3/binaries/apache-maven-3.6.3-bin.tar.gz
+          tar -zxvf $(ls | grep apache-maven-*-bin.tar.gz)
+          rm -rf $(ls | grep apache-maven-*-bin.tar.gz)
+          ln -s $(ls | grep apache-maven*) maven
+          echo 'export M2_HOME=/opt/maven' > /etc/profile.d/maven.sh
+          echo 'export PATH=${M2_HOME}/bin:${PATH}' >> /etc/profile.d/maven.sh
+          source /etc/profile.d/maven.sh
+
 Outputs:
   JenkinsDNS:
     Description: Jenkins Server DNS Name

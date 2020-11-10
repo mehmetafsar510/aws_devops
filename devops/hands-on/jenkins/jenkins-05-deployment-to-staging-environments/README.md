@@ -95,13 +95,14 @@ sudo yum install java-devel
 - Install Maven
   
 ```bash
+sudo su
 cd /opt
+rm -rf maven
 wget https://ftp.itu.edu.tr/Mirror/Apache/maven/maven-3/3.6.3/binaries/apache-maven-3.6.3-bin.tar.gz
 tar -zxvf $(ls | grep apache-maven-*-bin.tar.gz)
 rm -rf $(ls | grep apache-maven-*-bin.tar.gz)
 sudo ln -s $(ls | grep apache-maven*) maven
-sudo su
-echo 'export M2_HOME=/opt/maven' >> /etc/profile.d/maven.sh
+echo 'export M2_HOME=/opt/maven' > /etc/profile.d/maven.sh
 echo 'export PATH=${M2_HOME}/bin:${PATH}' >> /etc/profile.d/maven.sh
 exit
 source /etc/profile.d/maven.sh
@@ -506,7 +507,7 @@ pipeline {
 
 - For name, enter `deploy-application-staging-environment-pipeline`
 
-- Athe bottom, `Copy from`, enter `Deploy-Application-Staging-Environment`
+- At the bottom, `Copy from`, enter `Deploy-Application-Staging-Environment`
 
 - Click `OK`, and `Save`
 
@@ -516,12 +517,9 @@ pipeline {
 
 - For name, enter `deploy-application-production-environment-pipeline`
 
-- Athe bottom, `Copy from`, enter `Deploy-Application-Production-Environment`
+- At the bottom, `Copy from`, enter `Deploy-Application-Production-Environment`
 
 - Click `OK`, and `Save`
-
-- Check that `Pipeline script` option is selected.
-
 
 
 - Go to the `deploy-application-staging-environment-pipeline` job
@@ -542,6 +540,28 @@ pipeline {
   - select `Last successful build`
 
 - `Save` the job
+
+- Now, update the `Jenkinsfile` to include last 2 stages. For this purpose, add these 2 stages in `Jenkinsfile` like below:
+
+```text
+        stage('Deploy to Staging Environment'){
+            steps{
+                build job: 'deploy-application-staging-environment-pipeline'
+
+            }
+            
+        }
+        stage('Deploy to Production Environment'){
+            steps{
+                timeout(time:5, unit:'DAYS'){
+                    input message:'Approve PRODUCTION Deployment?'
+                }
+                build job: 'deploy-application-production-environment-pipeline'
+            }
+        }
+```
+
+- Note: You can also use updated `Jenkinsfile2` file instead of updating `Jenkinsfile`.
 
 - Go to the `package-application-code-pipeline` then select `Build Now` and observe the behaviors.
 
