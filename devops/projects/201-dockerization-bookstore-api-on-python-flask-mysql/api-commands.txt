@@ -1,0 +1,15 @@
+api commands
+
+1. curl <EC2-public-DNS>
+
+2. curl <EC2-public-DNS>/books
+
+3. curl <EC2-public-DNS>/books/1
+
+4. curl -X DELETE <EC2-public-DNS>/books/1 ---> Sonra göster silindiğini
+
+5. curl -X POST -H "Content-Type: application/json" -d '{"title":"Animal Farm"}' <EC2-public-DNS>/book
+
+6. curl -X PUT -H "Content-Type: application/json" -d '{"author":"George Orwell"}' <EC2-public-DNS>/books/4s
+
+7. Bu answer'lar ile UI'lar create edilir. Stateless operation means client'ın statini düşünmek zorunda değilsin, client'in state'ini tutmak zorunda değilsin. Birisi sana request gönderir ve result'ı client'a geri gönderir. Cokkie kullanmak zorunda değilsim. 
