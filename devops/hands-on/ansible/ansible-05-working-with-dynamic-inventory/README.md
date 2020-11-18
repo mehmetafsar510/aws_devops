@@ -7,7 +7,10 @@ The purpose of this hands-on training is to give students the knowledge of using
 At the end of this hands-on training, students will be able to;
 
 - Explain what is dynamic inventory
+
 - Explain how to use dynamic inventory with EC2 plugin.
+
+![ho-05](ho-05.png)
 
 ## Outline
 
