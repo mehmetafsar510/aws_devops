@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: 
+    name: todoapi-configmap
+data: 
+    DATABASE_URL: clarus-db-service
+    USER: clarusway
+    DB: todo_db
+
+

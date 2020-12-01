@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clarus-db-deploy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clarus-db
+  template:
+    metadata:
+      labels:
+        app: clarus-db
+    spec:
+      containers:
+      - name: clarus-db
+        image: mysql:5.7
+        ports:
+        - containerPort: 3306
+        env:
+          #- name: MYSQL_ROOT_PASSWORD
+          #  value: R1234r
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: todoapi-secret
+              key: mysql-root-password
+        #- name: MYSQL_DATABASE
+        #  value: todo_db
+        - name: MYSQL_DATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: todoapi-configmap
+              key: DB
+        #- name: MYSQL_USER
+        #  value: clarusway
+        - name: MYSQL_USER
+          valueFrom:
+            configMapKeyRef:
+              name: todoapi-configmap
+              key: USER
+        #- name: MYSQL_PASSWORD
+        #  value: Clarusway_1
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: todoapi-secret
+              key: mysql-admin-password
+        volumeMounts:
+        - name: clarus-persistent-storage
+          mountPath: /var/lib/mysql
+      volumes:
+      - name: clarus-persistent-storage
+        persistentVolumeClaim:
+          claimName: clarus-pv-claim
