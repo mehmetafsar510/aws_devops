@@ -208,7 +208,7 @@ Terraform will perform the following actions:
 
   # aws_instance.sample-resource will be created
   + resource "aws_instance" "tf-example-ec2" {
-      + ami                          = "ami-09d95fab7fff3776c"
+      + ami                          = "ami-04d29b6f966df1537"
       + arn                          = (known after apply)
       + associate_public_ip_address  = (known after apply)
       + availability_zone            = (known after apply)
@@ -367,7 +367,7 @@ Terraform has a built in command called `terraform state` for advanced state man
 
 ```bash
 $ terraform state list
-aws_instance.tf-examle-ec2
+aws_instance.tf-example-ec2
 ```
 
 ### Creating a AWS S3 bucket
@@ -380,7 +380,7 @@ provider "aws" {
 }
 
 resource "aws_instance" "tf-example-ec2" {
-    ami           = "ami-09d95fab7fff3776c"
+    ami           = "ami-04d29b6f966df1537"
     instance_type = "t2.micro" 
     key_name      = "northvirginia"    #<pem file>
     tags = {
@@ -407,7 +407,7 @@ Error: Error creating S3 bucket: AccessDenied: Access Denied
         status code: 403, request id: 8C5E290CD1CD3F71, host id: NT6nPSh0nW9rripGZrOAo48qJpZ2yToKCiGxDl6gfKIXY97uVH67lcvBiQjX9bsJRX3cL1oNVNM=
 ```
 
-- Becoues of we didn't use our aws credentials in ec2 instance in the `tf-example.tf` file , we take an error. So, now create a new role which allow to access ec2 and s3. Then name the role `terraform-ec2-s3-role`. And look at the AWS console, and show ec2 was created , but s3 bucket was not created. Then attach the new role to the ec2 and run the command `terraform apply -auto-approve`.
+- Becouse of we didn't use our aws credentials in ec2 instance in the `tf-example.tf` file , we take an error. So, now create a new role which allow to access ec2 and s3. Then name the role `terraform-ec2-s3-role`. And look at the AWS console, and show ec2 was created , but s3 bucket was not created. Then attach the new role to the ec2 and run the command `terraform apply -auto-approve`.
 
 ```bash
 terraform apply -auto-approve
@@ -497,8 +497,8 @@ output "tf-example-public-ip" {
   value = aws_instance.tf-example-ec2.public_ip
 }
 
-output "tf-example-versioning" {
-  value = aws_s3_bucket.tf-example-s3.versioning
+output "tf-example-s3-meta" {
+  value = aws_s3_bucket.tf-example-s3
 }
 ```
 
@@ -537,11 +537,15 @@ aws_instance.tf-example-ec2
 
 - Run the command `terraform apply -auto-approve` and create S3 bucket again.
 
+```bash
+terraform apply -auto-approve
+```
+
 -  Go to the `tf-example.tf` file and make the changes.
 
 ```bash
 resource "aws_instance" "tf-example-ec2" {
-    - ami           = "ami-09d95fab7fff3776c"
+    - ami           = "ami-04d29b6f966df1537"
     + ami           = "ami-0885b1f6bd170450c"
     instance_type = "t2.micro" 
     key_name      = "northvirginia"    #<pem file>
@@ -595,17 +599,6 @@ Do you want to perform these actions?
 
 Apply complete! Resources: 0 added, 0 changed, 0 destroyed.
 
-Outputs:
-
-tf-example-private-ip = 172.31.22.95
-tf-example-public_ip = 54.145.54.140
-tf-example-versioning = [
-  {
-    "enabled" = false
-    "mfa_delete" = false
-  },
-]
-[ec2-user@
 ```
 
 - We can create a plan file in terraform with the `-out` command. You can use this file instead of `terraform.tfstate` file.
@@ -617,16 +610,14 @@ terraform plan -destroy -out=DestroyAllResources.tfplan
 - Go to the EC2 and see the file `DestroyAllResources.tfplan` was created. Now, run the file with `terraform apply` command
 
 ```bash
-terraform apply "DestroyAllResuources.tfplan"
+terraform apply "DestroyAllResources.tfplan"
 ```
-
 ### Variables
 
 - Make the changes in the `tf-example.tf` file.
 
 ```bash
 provider "aws" {
-  profile = "default"
   region  = "us-east-1"
 }
 
@@ -641,7 +632,7 @@ variable "ec2-type" {
 }
 
 variable "ec2-ami" {
-  default = "ami-0885b1f6bd170450c"
+  default = "ami-04d29b6f966df1537"
   description = "ami for new ec2"
 }
 
@@ -650,7 +641,7 @@ resource "aws_instance" "tf-example-ec2" {
   instance_type = var.ec2-type
   key_name      = "northvirginia"
   tags = {
-    Name = var.ec2-name
+    Name = "${var.ec2-name}-💻🎯🎉"
   }
 }
 
@@ -672,7 +663,7 @@ output "tf-example-private-ip" {
   value = aws_instance.tf-example-ec2.private_ip
 }
 
-output "tf-example-versioning" {
+output "tf-example-s3-meta" {
   value = aws_s3_bucket.tf-example-s3
 }
 
@@ -713,7 +704,7 @@ resource "aws_instance" "tf-example-ec2" {
 terraform apply
 ```
 
-- Go to the `variables.tf` file and uncomment the line.
+- Go to the `variables.tf` file and comment the line.
 
 ```tf
 variable "s3-bucket-name" {
@@ -725,7 +716,7 @@ variable "s3-bucket-name" {
 - Run the command belov.
 
 ```bash
-terraform plan -var="s3-bucket-name=oliver-new-s3-bucket"
+terraform plan -var="s3-bucket-name=oliver-new-s3-bucket-2"
 ```
 
 - You can define variables with `-var` command
@@ -742,6 +733,14 @@ s3-bucket-name = "oliver-s3-bucket-newest"
 terraform plan --var-file="oliver.tfvars"
 ```
 
+- Go to the `variables.tf` file and uncomment the line.
+
+```tf
+variable "s3-bucket-name" {
+  default     = "oliver-new-s3-bucket"
+  description = "name for new s3 bucket"
+}
+```
 ### Conditionals and Loops
 
 - Go to the `variables.tf` file and add a new variable.
@@ -752,7 +751,7 @@ variable "num_of_buckets" {
 }
 ```
 
-- Go to the `tf-example.tf` file make the changes in order. Then run the file.
+- Go to the `tf-example.tf` file, make the changes in order. Then run the file.
 
 ```bash
 resource "aws_s3_bucket" "tf-example-s3" {
@@ -766,6 +765,8 @@ resource "aws_s3_bucket" "tf-example-s3" {
 ```bash
 terraform plan
 ```
+
+- Go to the `tf-example.tf` file, make the changes in order. Then run the file.
 
 ```bash
 resource "aws_s3_bucket" "tf-example-s3" {
@@ -821,9 +822,9 @@ terraform apply
 
 - `Data sources` allow data to be fetched or computed for use elsewhere in Terraform configuration.
 
-- Go to the `AWS console and create an image` from your ec2.
+- Go to the `AWS console and create an image` from your ec2. Name `terrafrom-lesson-ami`.
 
-- Go to the `variables.tf` file and uncomment the variable `ec2-ami`.
+- Go to the `variables.tf` file and comment the variable `ec2-ami`.
 
 - Go to the `tf-example.tf` file make the changes in order. Then run the file.
 
@@ -860,13 +861,16 @@ terraform plan
 
 - Create a new folder name `terraform-remote-state` and move `terraform-aws-example` into it. Then create another folder name `s3-backend` in this folder, too. 
 
-- terraform-remote-state
+```txt
+  terraform-remote-state
     ├── s3-backend
     │   └── backend.tf
     └── terraform-aws-example
         ├── oliver.tfvars
         ├── tf-example.tf
         └── variables.tf
+
+```
 
 - Go to the `s3-backend` folder and create a file name `backend.tf`. Add the followings.
 
@@ -939,10 +943,13 @@ terraform apply
 terraform destroy
 ```
 
+- Go to the AWS console and delete `tf-remote-s3-bucket-oliver` and `tf-s3-app-lock` DynamoDb table.
+
 ### Terraform modules
 
 -Create folders name `terraform-modules`, `modules`, `dev`, `prod`,`vpc`, `main-vpc` and files as belov. 
 
+```txt
  terraform-modules
    ├── dev
    │   └── vpc
@@ -955,6 +962,7 @@ terraform destroy
    └── prod
        └── vpc
            └── prod-vpc.tf
+```
 
 - Go to the `modules/main-vpc/main.tf` file, add the followings.
 
@@ -1032,14 +1040,11 @@ output "private_subnet_cidr" {
 - Go to the `dev/vpc/dev-vpc.tf` file, add the followings.
 
 ```bash
-provider "aws" {
-  region = "us-east-1"
-}
-
 module "tf-vpc" {
   source = "../../modules/main-vpc"
   environment = "DEV"
   }
+
 output "test" {
   value = module.tf-vpc.vpc_cidr
 }
@@ -1048,10 +1053,6 @@ output "test" {
 - Go to the `prod/vpc/prod-vpc.tf` file, add the followings.
 
 ```bash
-provider "aws" {
-  region = "us-east-1"
-}
-
 module "tf-vpc" {
   source = "../../modules/main-vpc"
   environment = "PROD"
@@ -1062,9 +1063,32 @@ output "test" {
 }
 
 ```
+
+- Go to the `dev/vpc` folder and run the command belove.
+
+```bash
+terraform init
+
+terraform apply
+```
+
+- Go to the AWS console and check the VPC and subnets.
+
+- Go to the `prod/vpc` folder and run the command belove.
+
+```bash
+terraform init
+
+terraform apply
+```
+
+- Go to the AWS console and check the VPC and subnets.
+
 ### Destroy
 
 The `terraform destroy` command terminates resources defined in your Terraform configuration. This command is the reverse of terraform apply in that it terminates all the resources specified by the configuration. It does not destroy resources running elsewhere that are not described in the current configuration.
+
+- Go to the `prod/vpc` and  `dev/vpc` folders and run the command belove.
 
 ```bash
 terraform destroy
