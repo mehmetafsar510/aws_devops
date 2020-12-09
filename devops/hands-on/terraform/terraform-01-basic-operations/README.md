@@ -678,7 +678,7 @@ terraform fmt
 terraform apply
 ```
 
-- Uncomment variables of `ec2-name` and `ec2-type`. Then make the changes in the `tf-example.tf` file. 
+- Comment variables of `ec2-name` and `ec2-type`. Then make the changes in the `tf-example.tf` file. 
 
 ```bash
 locals {
