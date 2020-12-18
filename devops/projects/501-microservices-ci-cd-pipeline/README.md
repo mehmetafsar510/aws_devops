@@ -137,6 +137,8 @@ git checkout dev
 
 * Test the compiled source code.
 
+sudo chmod +x mvnw
+
 ``` bash
 ./mvnw clean test
 ```

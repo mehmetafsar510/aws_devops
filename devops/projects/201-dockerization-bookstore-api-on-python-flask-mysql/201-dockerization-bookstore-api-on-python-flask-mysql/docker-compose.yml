@@ -1,0 +1,27 @@
+version: "3.7"
+services:
+  
+  database:
+    image: mysql:5.7
+    container_name: database
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=bookstore_db
+      - MYSQL_USER=clarusway
+      - MYSQL_PASSWORD=Clarusway_1
+    networks:
+      - juiletnet
+
+  app:
+    image: mehmetafsar510/bookstore-api:latest
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - database
+    networks:
+      - juiletnet
+networks:
+  juiletnet:
+    driver: bridge
