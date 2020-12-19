@@ -1,4 +1,4 @@
-# Project-203: Docker Swarm Deployment of Phonebook Application (Python Flask) with MySQL
+# Project-202a: Docker Swarm Deployment of Phonebook Application (Python Flask) with MySQL
 
 ## Description
 
