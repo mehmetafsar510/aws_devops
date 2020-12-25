@@ -73,3 +73,34 @@ MSP-8:
 
 * docker image prune -a
     |--> removes all images
+
+
+MSP-11:
+------
+* GPG stands for GNU Privacy Gaurd
+
+* wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat/jenkins.repo
+    |--> -O : outputs to the configuration file into yum repo.
+    |--> in this configuration file there is a url. this url is used during gpg (gnu privacy gaurd) checking
+
+* rpm --import https://pkg.jenkins.io/redhat/jenkins.io.key 
+    |--> this command imports the gpg key for jenkins. Then it's checked using the url coming 
+         from the configuration file
+
+* sed -i 's/^ExecStart=.*/ExecStart=\/usr\/bin\/dockerd -H tcp:\/\/127.0.0.1:2375 -H unix:\/\/\/var\/run\/docker.sock/g' /lib/systemd/system/docker.service
+    |--> this line causes the docker service to set the first command to be accomplished while starting up
+    |--> (-H or --host list) means "Daemon socket(s) to connect to"
+
+
+MSP-13:
+------
+* Jacoco code coverage report configuration.
+|--> path to excute files: It is defined where the *.exec files are. In our example, there is just jacoco.exec, so only jacoco.exec will be executed.
+|-->inclusions: It is defined included binary files.
+|-->exclusions: It is defined excluded binary files.
+|-->path to class directories: It is defined where compiled code can be found.
+|-->path to source dirs: It is defined where the corresponding source code is.
+|-->inclusions: It is defined included souce code files. 
+|-->exclusion: It is defined excluded souce code files
+
+resource: https://plugins.jenkins.io/jacoco/
