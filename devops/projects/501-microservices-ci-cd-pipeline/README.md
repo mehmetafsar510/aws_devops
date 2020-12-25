@@ -1498,7 +1498,7 @@ git push origin dev
 ```bash
 git checkout dev
 git branch feature/msp-17
-git checkout feature/msp-17
+git checkout -b feature/msp-17
 ```
 
 - Prepare a script to package the app with maven Docker container and save it as `package-with-maven-container.sh` and save it under `jenkins` folder.
@@ -1582,12 +1582,14 @@ git push --set-upstream origin feature/msp-17
     PATH="$PATH:/usr/local/bin"
     APP_REPO_NAME="clarusway-repo/petclinic-app-dev" # Write your own repo name
     AWS_REGION="us-east-1" #Update this line if you work on another region
-    ECR_REGISTRY="046402772087.dkr.ecr.us-east-1.amazonaws.com" # Replace this line with your ECR name
+    ECR_REGISTRY="646075469151.dkr.ecr.us-east-1.amazonaws.com" # Replace this line with your ECR name
     aws ecr create-repository \
         --repository-name ${APP_REPO_NAME} \
         --image-scanning-configuration scanOnPush=false \
         --image-tag-mutability MUTABLE \
         --region ${AWS_REGION}
+
+        
     . ./jenkins/package-with-maven-container.sh
     . ./jenkins/prepare-tags-ecr-for-dev-docker-images.sh
     . ./jenkins/build-dev-docker-images-for-ecr.sh
