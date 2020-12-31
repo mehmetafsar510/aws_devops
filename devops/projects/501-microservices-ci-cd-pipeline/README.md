@@ -2698,7 +2698,7 @@ git push origin release
 ``` bash
 git checkout release
 git branch feature/msp-22
-git checkout feature/msp-22
+git checkout -b feature/msp-22
 ```
 
 * Create a folder with name of `k8s` for keeping the deployment files of Petclinic App on Kubernetes cluster.
