@@ -1,0 +1,561 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description:  Migrating a Database with DMS
+Metadata:
+  LICENSE: Apache License Version 2.0
+Parameters:
+  LatestAmiId:
+    Description: AMI for Instance (default is latest AmaLinux2)
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+  MyKeypair:
+    Description: My key pair
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: "the_doctor"
+  DBName:
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric
+      characters.
+    Default: a4lwordpress
+    Description: The WordPress database name
+    MaxLength: '64'
+    MinLength: '1'
+    Type: String
+  DBPassword:
+    AllowedPattern: '^[A-Za-z][a-zA-Z0-9@%$_-]{8,41}$'
+    ConstraintDescription: must contain only alphanumeric characters.
+    Description: The WordPress database admin account password
+    MaxLength: '41'
+    MinLength: '8'
+    Default: 'clarusway'
+    Type: String
+  DBRootPassword:
+    AllowedPattern: '^[A-Za-z][a-zA-Z0-9@%$_-]{8,41}$'
+    ConstraintDescription: must contain only alphanumeric characters.
+    Description: MySQL root password
+    Default: 'clarusway'
+    MaxLength: '41'
+    MinLength: '8'
+    Type: String
+  DBUser:
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric
+      characters.
+    Description: The WordPress database admin account username
+    Default: a4lwordpress
+    MaxLength: '16'
+    MinLength: '1'
+    Type: String
+Resources:
+  onpremVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 192.168.10.0/24
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: onpremVPC
+  onpremInternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+      - Key: Name
+        Value: onpremIGW
+  onpremInternetGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref onpremVPC
+      InternetGatewayId: !Ref onpremInternetGateway
+  onpremPublicRouteTable: 
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref onpremVPC
+      Tags:
+      - Key: Name
+        Value: onpremPublicRT
+  onpremDefaultV4Route: 
+    Type: 'AWS::EC2::Route'
+    DependsOn: onpremInternetGatewayAttachment
+    Properties:
+      RouteTableId:
+        Ref: onpremPublicRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId:
+        Ref: onpremInternetGateway
+  onpremPublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref onpremVPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 192.168.10.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: onprem-public
+  onpremPublicRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref onpremPublicSubnet
+      RouteTableId:
+        Ref: onpremPublicRouteTable
+  onpremSecurityGroupWeb:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: !Ref onpremVPC
+      GroupDescription: Control access to the Web EC2 Instance
+      SecurityGroupIngress: 
+        - Description: 'Allow HTTP IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: '0.0.0.0/0'
+        - Description: 'Allow SSH IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: '0.0.0.0/0'
+  onpremSecurityGroupDB:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: !Ref onpremVPC
+      GroupDescription: Control access to the DB EC2 Instance
+      SecurityGroupIngress: 
+        - Description: 'Allow MySQL IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: '0.0.0.0/0'
+        - Description: 'Allow SSH IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: '0.0.0.0/0'
+  onpremRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+  onpremInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: /
+      Roles:
+        - !Ref onpremRole
+  onpremCatWeb:
+    DependsOn:
+      - "onpremCatDB"
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: "t2.micro"
+      ImageId: "ami-0be2609ba883822ec"
+      KeyName: !Ref MyKeypair
+      IamInstanceProfile: !Ref onpremInstanceProfile
+      SubnetId: !Ref onpremPublicSubnet
+      SecurityGroupIds: 
+        - !Ref onpremSecurityGroupWeb
+      Tags:
+        - Key: Name
+          Value: CatWeb
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          # Configure Wordpress
+          yum update -y
+          amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+          yum install -y httpd
+          systemctl start httpd
+          systemctl enable httpd
+          wget https://wordpress.org/latest.tar.gz
+          tar -xzf latest.tar.gz
+          sudo cp -r wordpress/* /var/www/html/
+          cd /var/www/html
+          cp wp-config-sample.php wp-config.php
+          chown -R apache /var/www
+          chgrp -R apache /var/www
+          chmod 775 /var/www
+          find /var/www -type d -exec sudo chmod 2775 {} \;
+          find /var/www -type f -exec sudo chmod 0664 {} \;
+          systemctl restart httpd
+          cd /var/www/html
+          cp ./wp-config-sample.php ./wp-config.php
+          sed -i "s/'localhost'/'${onpremCatDB.PrivateIp}'/g" wp-config.php
+          sed -i "s/'database_name_here'/'${DBName}'/g" wp-config.php
+          sed -i "s/'username_here'/'${DBUser}'/g" wp-config.php
+          sed -i "s/'password_here'/'${DBPassword}'/g" wp-config.php
+          systemctl restart httpd
+          sleep 60
+          cd /var/www/
+          scp -rp html ec2-user@${awsCatWeb.PrivateIp}:/home/ec2-user password ${DBPassword}
+    
+  onpremCatDB:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: "t2.micro"
+      ImageId: "ami-0be2609ba883822ec"
+      KeyName: !Ref MyKeypair
+      IamInstanceProfile: !Ref onpremInstanceProfile
+      SubnetId: !Ref onpremPublicSubnet
+      SecurityGroupIds: 
+        - !Ref onpremSecurityGroupDB
+      Tags:
+        - Key: Name
+          Value: CatDB
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          yum update -y
+          yum install -y mariadb-server
+          systemctl start mariadb
+          systemctl enable mariadb
+          mysqladmin -u root password ${DBRootPassword}
+          echo "CREATE DATABASE ${DBName};" >> /tmp/db.setup
+          echo "CREATE USER '${DBUser}' IDENTIFIED BY '${DBPassword}';" >> /tmp/db.setup
+          echo "GRANT ALL ON ${DBName}.* TO ${DBUser} IDENTIFIED BY '${DBPassword}' WITH GRANT OPTION;" >> /tmp/db.setup
+          echo "FLUSH PRIVILEGES;" >> /tmp/db.setup
+          mysql -u root --password='${DBRootPassword}' < /tmp/db.setup
+          rm /tmp/db.setup
+         
+  awsVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.16.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: awsVPC
+  awsInternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+      - Key: Name
+        Value: awsIGW
+  awsInternetGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref awsVPC
+      InternetGatewayId: !Ref awsInternetGateway
+  awsPublicRouteTable: 
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref awsVPC
+      Tags:
+      - Key: Name
+        Value: awsPublicRT
+  awsPrivateRouteTable: 
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref awsVPC
+      Tags:
+      - Key: Name
+        Value: awsPrivateRT
+  awsDefaultV4Route: 
+    Type: 'AWS::EC2::Route'
+    DependsOn: awsInternetGatewayAttachment
+    Properties:
+      RouteTableId:
+        Ref: awsPublicRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId:
+        Ref: awsInternetGateway
+  awsPublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref awsVPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 10.16.48.0/20
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: aws-publicA
+  awsPublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref awsVPC
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: 10.16.112.0/20
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: aws-publicB
+  awsPrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref awsVPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 10.16.32.0/20
+      Tags:
+        - Key: Name
+          Value: aws-privateA
+  awsPrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref awsVPC
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: 10.16.96.0/20
+      Tags:
+        - Key: Name
+          Value: aws-privateB
+  awsPublicARouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref awsPublicSubnetA
+      RouteTableId:
+        Ref: awsPublicRouteTable
+  awsPublicBRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref awsPublicSubnetB
+      RouteTableId:
+        Ref: awsPublicRouteTable
+  awsPrivateARouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref awsPrivateSubnetA
+      RouteTableId:
+        Ref: awsPrivateRouteTable
+  awsPrivateBRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref awsPrivateSubnetB
+      RouteTableId:
+        Ref: awsPrivateRouteTable
+  awsSecurityGroupWeb:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: !Ref awsVPC
+      GroupDescription: Control access to the Web EC2 Instance
+      SecurityGroupIngress: 
+        - Description: 'Allow HTTP IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: '0.0.0.0/0'
+        - Description: 'Allow SSH IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: '0.0.0.0/0'
+        - Description: 'Allow MySQL IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: '0.0.0.0/0'
+  awsSecurityGroupDB:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: !Ref awsVPC
+      GroupDescription: Control access to the DB EC2 Instance
+      SecurityGroupIngress: 
+        - Description: 'Allow MySQL IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: '0.0.0.0/0'
+  awsRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+  awsInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: /
+      Roles:
+        - !Ref awsRole
+
+  MyPeering:
+    Type: AWS::EC2::VPCPeeringConnection
+    Properties:
+      PeerVpcId: !Ref onpremVPC #required
+      VpcId: !Ref awsVPC #required
+
+  PeeringonpremPublic:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      DestinationCidrBlock: 10.16.0.0/16
+      RouteTableId: !Ref onpremPublicRouteTable
+      VpcPeeringConnectionId: !Ref MyPeering
+  
+  PeeringawsPublicRT:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      DestinationCidrBlock: 192.168.10.0/24
+      RouteTableId: !Ref awsPublicRouteTable
+      VpcPeeringConnectionId: !Ref MyPeering
+
+  PeeringawsPrivateRT:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      DestinationCidrBlock: 192.168.10.0/24
+      RouteTableId: !Ref awsPrivateRouteTable
+      VpcPeeringConnectionId: !Ref MyPeering
+
+  MyDBSubnetGroup:
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      DBSubnetGroupDescription: Subnets available for the RDS DB Instance
+      SubnetIds:
+        - !Ref awsPrivateSubnetA
+        - !Ref awsPrivateSubnetB
+  MyDBSecurityGroup:
+    Type: "AWS::RDS::DBSecurityGroup"
+    Properties:
+      DBSecurityGroupIngress: #required
+        - EC2SecurityGroupId: !GetAtt awsSecurityGroupWeb.GroupId
+      EC2VpcId: !Ref awsVPC
+      GroupDescription: Security group for RDS DB Instance. #required
+
+  MyDatabaseServer:
+    Type: "AWS::RDS::DBInstance"
+    DeletionPolicy: Delete
+    Properties:
+      AllocatedStorage: "20"
+      AllowMajorVersionUpgrade: false
+      AutoMinorVersionUpgrade: true
+      BackupRetentionPeriod: 0
+      DBInstanceClass: db.t2.micro #required
+      DBName: !Ref DBName 
+      DBSubnetGroupName: !Ref MyDBSubnetGroup
+      DeleteAutomatedBackups: true
+      DeletionProtection: false
+      DBSecurityGroups:
+        - !Ref MyDBSecurityGroup
+      Engine: MariaDB
+      EngineVersion: 10.4.8
+      MasterUserPassword: !Ref DBPassword
+      MasterUsername: !Ref DBUser
+      MaxAllocatedStorage: 30
+      PreferredBackupWindow: 03:00-04:00
+      MultiAZ: false
+      Port: "3306"
+      VPCSecurityGroups:
+        - !Ref MyDBSecurityGroup
+
+  awsCatWeb:
+    DependsOn:
+      - "onpremCatDB"
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: "t2.micro"
+      ImageId: "ami-0be2609ba883822ec"
+      KeyName: !Ref MyKeypair
+      SubnetId: !Ref awsPublicSubnetA
+      SecurityGroupIds: 
+        - !Ref awsSecurityGroupWeb
+      Tags:
+        - Key: Name
+          Value: awsCatWeb
+      UserData:
+        Fn::Base64: 
+          !Sub 
+            - |
+              #!/bin/bash -xe
+              yum update -y
+              yum install -y httpd mariadb
+              amazon-linux-extras install -y php7.2
+              systemctl start httpd
+              systemctl enable httpd
+              cd /etc/ssh/
+              sed -i "s/'PasswordAuthentication no'/'PasswordAuthentication yes'/g" sshd_config
+              passwd ec2-user ${DBPassword}
+              service sshd restart
+              cd html
+              cp * -R /var/www/html/
+              usermod -a -G apache ec2-user   
+              chown -R ec2-user:apache /var/www
+              chmod 2775 /var/www
+              find /var/www -type d -exec chmod 2775 {} \;
+              find /var/www -type f -exec chmod 0664 {} \;
+              systemctl restart httpd
+              cd /var/www/html
+              sed -i "s/'localhost'/'${MyDBURI}'/g" wp-config.php
+              source <(php -r 'require("/var/www/html/wp-config.php"); echo("DB_NAME=".DB_NAME."; DB_USER=".DB_USER."; DB_PASSWORD=".DB_PASSWORD."; DB_HOST=".DB_HOST); ')
+              SQL_COMMAND="mysql -u $DB_USER -h $DB_HOST -p$DB_PASSWORD $DB_NAME -e"
+              OLD_URL=$(mysql -u $DB_NAME -h $DB_HOST -p$DB_PASSWORD $DB_NAME -e 'select option_value from wp_options where option_id = 1;' | grep http)
+              HOST=$(curl http://169.254.169.254/latest/meta-data/public-hostname)
+              $SQL_COMMAND "UPDATE wp_options SET option_value = replace(option_value, '$OLD_URL', 'http://$HOST') WHERE option_name = 'home' OR option_name = 'siteurl';"
+              $SQL_COMMAND "UPDATE wp_posts SET guid = replace(guid, '$OLD_URL','http://$HOST');"
+              $SQL_COMMAND "UPDATE wp_posts SET post_content = replace(post_content, '$OLD_URL', 'http://$HOST');"
+              $SQL_COMMAND "UPDATE wp_postmeta SET meta_value = replace(meta_value,'$OLD_URL','http://$HOST');"
+            - MyDBURI: !GetAtt MyDatabaseServer.Endpoint.Address
+
+  MyReplicationSubnetGroup:
+    Type: AWS::DMS::ReplicationSubnetGroup
+    Properties: 
+      ReplicationSubnetGroupDescription: Subnets available for the DMS DB Instance
+      SubnetIds: 
+        - !Ref awsPrivateSubnetA
+        - !Ref awsPrivateSubnetB
+  
+  MyReplicationInstance:
+    Type: "AWS::DMS::ReplicationInstance"
+    Properties: 
+      EngineVersion: 3.4.3
+      MultiAZ: false
+      PreferredMaintenanceWindow: Sun:23:45-Mon:00:15
+      PubliclyAccessible: false
+      ReplicationInstanceClass: dms.t3.micro
+      ReplicationSubnetGroupIdentifier: !Ref MyReplicationSubnetGroup
+
+
+  MyReplicationSourceInstanceEndpoint:
+    Type: AWS::DMS::Endpoint
+    Properties:
+      DatabaseName: !Ref DBName
+      EndpointType: source #required
+      EngineName: "mariadb" #required
+      Password: !Ref DBPassword
+      Port: 3306
+      ServerName: !Ref onpremCatDB
+      Username: !Ref DBName
+
+  MyReplicationTargetInstanceEndpoint:
+    Type: AWS::DMS::Endpoint
+    Properties:
+      DatabaseName: !Ref DBName
+      EndpointType: target #required
+      EngineName: "mariadb" #required
+      Password: !Ref DBPassword
+      Port: 3306
+      ServerName: !Ref MyDatabaseServer
+      Username: !Ref DBName
+  MyReplicationTask:
+    Type: AWS::DMS::ReplicationTask
+    Properties:
+      MigrationType: full-load #required
+      ReplicationInstanceArn: !Ref MyReplicationInstance  #required
+      SourceEndpointArn: !Ref MyReplicationSourceInstanceEndpoint #required
+      TableMappings: "{ \"rules\": [ { \"rule-type\": \"selection\", \"rule-id\": \"1\", \"rule-name\": \"1\", \"object-locator\": { \"schema-name\": \"%a4lwordpress\", \"table-name\": \"%\" }, \"rule-action\": \"include\" } ] }" #required
+      TargetEndpointArn: !Ref MyReplicationTargetInstanceEndpoint #required
+Outputs:
+  WebsiteURL:
+    Value: !Sub
+      - http://${PublicAddress}
+      - PublicAddress: !GetAtt onpremCatWeb.PublicDnsName
+    Description: DMS Application URL
+  awsWebsiteURL:  
+    Value: !Sub
+      - http://${PublicAddress}
+      - PublicAddress: !GetAtt awsCatWeb.PublicDnsName
+    Description: DMS Application URL
