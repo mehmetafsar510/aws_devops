@@ -476,8 +476,7 @@ Resources:
               amazon-linux-extras install -y php7.2
               systemctl start httpd
               systemctl enable httpd
-              cd /etc/ssh/
-              sed -i "s/'PasswordAuthentication no'/'PasswordAuthentication yes'/g" sshd_config
+              sed -i "s/'PasswordAuthentication no'/'PasswordAuthentication yes'/g" /etc/ssh/sshd_config
               passwd ec2-user ${DBPassword}
               service sshd restart
               cd html
