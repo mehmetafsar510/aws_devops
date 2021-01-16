@@ -1,10 +1,7 @@
 AWSTemplateFormatVersion: 2010-09-09
 Description:
-  CloudFormation Template for  Static  web application. 
-  This application  deployed on AWS S3 as static website.
-  We deployed our code with Lambda and Api Gateway. In this 
-  template we use two s3 bucket and we take our code to diffrent
-  s3 bucket with  CORS policy. 
+  We are going to implement a simple serverless application 
+  using S3, API Gateway, Lambda, Step Functions, SNS & SES with using Aws Cloudformation template.
 
 Parameters:
 

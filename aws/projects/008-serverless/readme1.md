@@ -1,10 +1,10 @@
 # Serverless App 
 
-We are going to implement a simple serverless application using S3, API Gateway, Lambda, Step Functions, SNS & SES with using Aws Cloudformation template.  
+We are going to implement a simple serverless application using S3, API Gateway, Lambda, Step Functions, SNS & SES with using Aws Cloudformation template.
+
+- [Serverless Cloudformation Template](https://github.com/mehmetafsar510/aws_devops/blob/master/aws/projects/008-serverless/serveslessyaml.yml)
 
 ![Architecture](pic222.png)
-
-- [Serverless Cloudformation Template](https://github.com/acantril/learn-cantrill-io-labs/blob/master/aws-serverless-pet-cuddle-o-tron/02_LABINSTRUCTIONS/STAGE1%20-%20Configure%20SES.md)
 
 Thia consists of 5 stages :-
 
