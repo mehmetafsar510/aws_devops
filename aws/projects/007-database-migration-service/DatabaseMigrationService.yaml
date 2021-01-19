@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description:  Migrating a Database with DMS
+Description:  Migrating a Database with DMS 
 Metadata:
   LICENSE: Apache License Version 2.0
 Parameters:
@@ -26,13 +26,13 @@ Parameters:
     Description: The WordPress database admin account password
     MaxLength: '41'
     MinLength: '8'
-    Default: 'clarusway'
+    Default: 'cats-dogs-rabbits-chickens'
     Type: String
   DBRootPassword:
     AllowedPattern: '^[A-Za-z][a-zA-Z0-9@%$_-]{8,41}$'
     ConstraintDescription: must contain only alphanumeric characters.
     Description: MySQL root password
-    Default: 'clarusway'
+    Default: 'cats-dogs-rabbits-chickens'
     MaxLength: '41'
     MinLength: '8'
     Type: String
@@ -109,7 +109,7 @@ Resources:
           FromPort: 80
           ToPort: 80
           CidrIp: '0.0.0.0/0'
-        - Description: 'Allow SSH IPv4 IN'
+        - Description: 'Allow HTTP IPv4 IN'
           IpProtocol: tcp
           FromPort: 22
           ToPort: 22
@@ -125,7 +125,7 @@ Resources:
           FromPort: 3306
           ToPort: 3306
           CidrIp: '0.0.0.0/0'
-        - Description: 'Allow SSH IPv4 IN'
+        - Description: 'Allow HTTP IPv4 IN'
           IpProtocol: tcp
           FromPort: 22
           ToPort: 22
@@ -152,12 +152,10 @@ Resources:
       Roles:
         - !Ref onpremRole
   onpremCatWeb:
-    DependsOn:
-      - "onpremCatDB"
     Type: AWS::EC2::Instance
     Properties:
       InstanceType: "t2.micro"
-      ImageId: "ami-0be2609ba883822ec"
+      ImageId: "ami-0bf6ba120443f8e1f"
       KeyName: !Ref MyKeypair
       IamInstanceProfile: !Ref onpremInstanceProfile
       SubnetId: !Ref onpremPublicSubnet
@@ -170,39 +168,28 @@ Resources:
         Fn::Base64: !Sub |
           #!/bin/bash -xe
           # Configure Wordpress
-          yum update -y
-          amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
-          yum install -y httpd
-          systemctl start httpd
-          systemctl enable httpd
-          wget https://wordpress.org/latest.tar.gz
-          tar -xzf latest.tar.gz
-          sudo cp -r wordpress/* /var/www/html/
-          cd /var/www/html
-          cp wp-config-sample.php wp-config.php
-          chown -R apache /var/www
-          chgrp -R apache /var/www
-          chmod 775 /var/www
-          find /var/www -type d -exec sudo chmod 2775 {} \;
-          find /var/www -type f -exec sudo chmod 0664 {} \;
-          systemctl restart httpd
           cd /var/www/html
           cp ./wp-config-sample.php ./wp-config.php
           sed -i "s/'localhost'/'${onpremCatDB.PrivateIp}'/g" wp-config.php
           sed -i "s/'database_name_here'/'${DBName}'/g" wp-config.php
           sed -i "s/'username_here'/'${DBUser}'/g" wp-config.php
           sed -i "s/'password_here'/'${DBPassword}'/g" wp-config.php
-          systemctl restart httpd
-          sleep 60
+          /home/ec2-user/update_wp_ip.sh
+          yum -y install sshpass
           cd /var/www/
-          scp -rp html ec2-user@${awsCatWeb.PrivateIp}:/home/ec2-user password ${DBPassword}
-    
+          sshpass -p "${DBPassword}" scp -o StrictHostKeyChecking=no -rp html ec2-user@${awsCatWeb.PrivateIp}:/home/ec2-user
+          
+          
+  
   onpremCatDB:
     Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
     Properties:
       InstanceType: "t2.micro"
-      ImageId: "ami-0be2609ba883822ec"
       KeyName: !Ref MyKeypair
+      ImageId: "ami-0319a571f9ff661d7"
       IamInstanceProfile: !Ref onpremInstanceProfile
       SubnetId: !Ref onpremPublicSubnet
       SecurityGroupIds: 
@@ -213,18 +200,7 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash -xe
-          yum update -y
-          yum install -y mariadb-server
-          systemctl start mariadb
-          systemctl enable mariadb
-          mysqladmin -u root password ${DBRootPassword}
-          echo "CREATE DATABASE ${DBName};" >> /tmp/db.setup
-          echo "CREATE USER '${DBUser}' IDENTIFIED BY '${DBPassword}';" >> /tmp/db.setup
-          echo "GRANT ALL ON ${DBName}.* TO ${DBUser} IDENTIFIED BY '${DBPassword}' WITH GRANT OPTION;" >> /tmp/db.setup
-          echo "FLUSH PRIVILEGES;" >> /tmp/db.setup
-          mysql -u root --password='${DBRootPassword}' < /tmp/db.setup
-          rm /tmp/db.setup
-         
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackId} --resource onpremCatDB --region ${AWS::Region}
   awsVPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -411,13 +387,6 @@ Resources:
       RouteTableId: !Ref awsPrivateRouteTable
       VpcPeeringConnectionId: !Ref MyPeering
 
-  MyDBSubnetGroup:
-    Type: 'AWS::RDS::DBSubnetGroup'
-    Properties:
-      DBSubnetGroupDescription: Subnets available for the RDS DB Instance
-      SubnetIds:
-        - !Ref awsPrivateSubnetA
-        - !Ref awsPrivateSubnetB
   MyDBSecurityGroup:
     Type: "AWS::RDS::DBSecurityGroup"
     Properties:
@@ -426,6 +395,14 @@ Resources:
       EC2VpcId: !Ref awsVPC
       GroupDescription: Security group for RDS DB Instance. #required
 
+  MyDBSubnetGroup:
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      DBSubnetGroupDescription: Subnets available for the RDS DB Instance
+      SubnetIds:
+        - !Ref awsPrivateSubnetA
+        - !Ref awsPrivateSubnetB
+  
   MyDatabaseServer:
     Type: "AWS::RDS::DBInstance"
     DeletionPolicy: Delete
@@ -442,7 +419,7 @@ Resources:
       DBSecurityGroups:
         - !Ref MyDBSecurityGroup
       Engine: MariaDB
-      EngineVersion: 10.4.8
+      EngineVersion: 10.0.24
       MasterUserPassword: !Ref DBPassword
       MasterUsername: !Ref DBUser
       MaxAllocatedStorage: 30
@@ -454,7 +431,7 @@ Resources:
 
   awsCatWeb:
     DependsOn:
-      - "onpremCatDB"
+      - "MyDatabaseServer"
     Type: AWS::EC2::Instance
     Properties:
       InstanceType: "t2.micro"
@@ -476,10 +453,11 @@ Resources:
               amazon-linux-extras install -y php7.2
               systemctl start httpd
               systemctl enable httpd
-              sed -i "s/'PasswordAuthentication no'/'PasswordAuthentication yes'/g" /etc/ssh/sshd_config
-              passwd ec2-user ${DBPassword}
-              service sshd restart
-              cd html
+              sed -ie 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+              echo '${DBPassword}' | passwd ec2-user --stdin
+              systemctl restart sshd.service
+              sleep 100
+              cd /home/ec2-user/html
               cp * -R /var/www/html/
               usermod -a -G apache ec2-user   
               chown -R ec2-user:apache /var/www
@@ -487,8 +465,12 @@ Resources:
               find /var/www -type d -exec chmod 2775 {} \;
               find /var/www -type f -exec chmod 0664 {} \;
               systemctl restart httpd
+              sleep 100
               cd /var/www/html
-              sed -i "s/'localhost'/'${MyDBURI}'/g" wp-config.php
+              sed -i "s/'${onpremCatDB.PrivateIp}'/'${MyDBURI}'/g" wp-config.php
+
+              cat >> /home/ec2-user/update_wp_ip.sh<< 'EOF'
+              #!/bin/bash
               source <(php -r 'require("/var/www/html/wp-config.php"); echo("DB_NAME=".DB_NAME."; DB_USER=".DB_USER."; DB_PASSWORD=".DB_PASSWORD."; DB_HOST=".DB_HOST); ')
               SQL_COMMAND="mysql -u $DB_USER -h $DB_HOST -p$DB_PASSWORD $DB_NAME -e"
               OLD_URL=$(mysql -u $DB_NAME -h $DB_HOST -p$DB_PASSWORD $DB_NAME -e 'select option_value from wp_options where option_id = 1;' | grep http)
@@ -497,7 +479,15 @@ Resources:
               $SQL_COMMAND "UPDATE wp_posts SET guid = replace(guid, '$OLD_URL','http://$HOST');"
               $SQL_COMMAND "UPDATE wp_posts SET post_content = replace(post_content, '$OLD_URL', 'http://$HOST');"
               $SQL_COMMAND "UPDATE wp_postmeta SET meta_value = replace(meta_value,'$OLD_URL','http://$HOST');"
+              EOF
+
+              chmod 755 /home/ec2-user/update_wp_ip.sh
+              chown root /etc/rc.local
+              chmod 755 /etc/rc.local
+              echo "/home/ec2-user/update_wp_ip.sh" >> /etc/rc.local
+              /home/ec2-user/update_wp_ip.sh
             - MyDBURI: !GetAtt MyDatabaseServer.Endpoint.Address
+
 
   MyReplicationSubnetGroup:
     Type: AWS::DMS::ReplicationSubnetGroup
@@ -506,6 +496,8 @@ Resources:
       SubnetIds: 
         - !Ref awsPrivateSubnetA
         - !Ref awsPrivateSubnetB
+
+
   
   MyReplicationInstance:
     Type: "AWS::DMS::ReplicationInstance"
@@ -516,36 +508,43 @@ Resources:
       PubliclyAccessible: false
       ReplicationInstanceClass: dms.t3.micro
       ReplicationSubnetGroupIdentifier: !Ref MyReplicationSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref awsSecurityGroupWeb
 
 
   MyReplicationSourceInstanceEndpoint:
     Type: AWS::DMS::Endpoint
+    DependsOn:
+      - "MyReplicationInstance"
     Properties:
       DatabaseName: !Ref DBName
       EndpointType: source #required
       EngineName: "mariadb" #required
       Password: !Ref DBPassword
       Port: 3306
-      ServerName: !Ref onpremCatDB
+      ServerName: !GetAtt onpremCatDB.PrivateIp
       Username: !Ref DBName
 
   MyReplicationTargetInstanceEndpoint:
     Type: AWS::DMS::Endpoint
+    DependsOn:
+      - "MyReplicationInstance"
     Properties:
       DatabaseName: !Ref DBName
       EndpointType: target #required
       EngineName: "mariadb" #required
       Password: !Ref DBPassword
       Port: 3306
-      ServerName: !Ref MyDatabaseServer
+      ServerName: !GetAtt MyDatabaseServer.Endpoint.Address
       Username: !Ref DBName
+
   MyReplicationTask:
     Type: AWS::DMS::ReplicationTask
     Properties:
-      MigrationType: full-load #required
+      MigrationType: full-load-and-cdc #required
       ReplicationInstanceArn: !Ref MyReplicationInstance  #required
       SourceEndpointArn: !Ref MyReplicationSourceInstanceEndpoint #required
-      TableMappings: "{ \"rules\": [ { \"rule-type\": \"selection\", \"rule-id\": \"1\", \"rule-name\": \"1\", \"object-locator\": { \"schema-name\": \"%a4lwordpress\", \"table-name\": \"%\" }, \"rule-action\": \"include\" } ] }" #required
+      TableMappings: "{ \"rules\": [ { \"rule-type\": \"selection\", \"rule-id\": \"1\", \"rule-name\": \"1\", \"object-locator\": { \"schema-name\": \"a4lwordpress\", \"table-name\": \"%\" }, \"rule-action\": \"include\" } ] }" #required
       TargetEndpointArn: !Ref MyReplicationTargetInstanceEndpoint #required
 Outputs:
   WebsiteURL:
@@ -558,3 +557,4 @@ Outputs:
       - http://${PublicAddress}
       - PublicAddress: !GetAtt awsCatWeb.PublicDnsName
     Description: DMS Application URL
+
