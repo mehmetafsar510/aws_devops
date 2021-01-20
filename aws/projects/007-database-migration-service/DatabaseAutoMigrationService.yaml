@@ -1,12 +1,67 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description:  Migrating a Database with DMS 
+Description: >-
+  This CloudFormation creates the VPC, DMS, RDS resources required for demonstrating the
+  automated serverless way to run DMS tasks for data migration. 
 Metadata:
   LICENSE: Apache License Version 2.0
 Parameters:
+  UseExistingReplicationTask: 
+    Default: "no"
+    Type: String
+    Description: Specify yes to use existing replication task to test this solution
+    AllowedValues:
+      - "yes"
+      - "no"
+  MigrationRefreshIndicator:
+    Description: Please choose between migration and refresh options
+    Default: data-refresh
+    AllowedValues:
+      - data-migration
+      - data-refresh
+    Type: String
+  MigrationRefreshType:
+    Description: Please choose type of migration / refresh (must match with that of replication task)
+    Default: full-load
+    AllowedValues:
+      - full-load
+      #- full-load-and-cdc
+      #- cdc
+    Type: String
+  StartReplicationTaskType:
+    Type: String
+    Description: The type of replication task
+    AllowedValues:
+      #- start-replication
+      #- resume-processing
+      - reload-target
+    Default: reload-target
+  CdcStartTime:
+    Type: String
+    Description: Indicates the start time for a change data capture (CDC) operation, for example - '1999-01-30T12:12:12'
+    Default: ''
+  ScheduleOrOneTime:
+    Default: schedule
+    Description: Please choose between one-time migration refresh or scheduled
+    AllowedValues:
+      - one-time
+      - schedule
+    Type: String
+  CronSchedule:
+    Default: "cron(0 0 */1 * ? *)"
+    Description: Enter the schedule in cron format to schedule the migration
+    Type: String
+  ExistingDmsReplicationTaskName:
+    Type: String
+    Default: ''
+    Description: Existing replication task name
   LatestAmiId:
     Description: AMI for Instance (default is latest AmaLinux2)
     Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
     Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+  ReplicationTaskIdentifier:
+    Default: ec2db-rds-dms
+    Description: AWS DMS Replication Task name used for this blog
+    Type: String
   MyKeypair:
     Description: My key pair
     Type: AWS::EC2::KeyPair::KeyName
@@ -45,7 +100,378 @@ Parameters:
     MaxLength: '16'
     MinLength: '1'
     Type: String
+Rules:
+  DMSTaskNamePresent: 
+    RuleCondition: !Equals [ !Ref UseExistingReplicationTask, 'yes']
+    Assertions:
+      - Assert:
+          'Fn::Not':
+            - 'Fn::Equals':
+                - Ref: ExistingDmsReplicationTaskName
+                - ''
+        AssertDescription: Replication Task name must be specified if UseExistingReplicationTask is chosen as yes
+  OneTimeFullLoad:
+    RuleCondition: !Equals [ !Ref ScheduleOrOneTime, 'schedule']
+    Assertions:
+      - Assert:
+          'Fn::Not':
+            - 'Fn::Equals':
+                - Ref: MigrationRefreshType
+                - 'full-load-and-cdc'
+        AssertDescription: MigrationRefreshType must not be full-load-and-cdc if ScheduleOrOneTime is chosen to be schedule
+      - Assert:
+          'Fn::Not':
+            - 'Fn::Equals':
+                - Ref: MigrationRefreshType
+                - 'cdc'
+        AssertDescription: MigrationRefreshType must not be cdc if ScheduleOrOneTime is chosen to be schedule
+  DataRefreshFullLoad:
+    RuleCondition: !Equals [ !Ref MigrationRefreshIndicator, 'data-refresh']
+    Assertions:
+      - Assert:
+          'Fn::Equals':
+            - Ref: MigrationRefreshType
+            - 'full-load'
+        AssertDescription: MigrationRefreshType must be full-load if MigrationRefreshIndicator is chosen to be data-refresh
+  FullLoadAndCdcOneTime:
+    RuleCondition: !Equals [ !Ref MigrationRefreshType, 'full-load-and-cdc']
+    Assertions:
+      - Assert:
+          'Fn::Equals':
+            - Ref: ScheduleOrOneTime
+            - 'one-time'
+        AssertDescription: Schedule must be one-time if MigrationRefreshType is chosen to be full-load-and-cdc
+      - Assert:
+          'Fn::Not':
+            - 'Fn::Equals':
+                - Ref: CdcStartTime
+                - ''
+        AssertDescription: CdcStartTime must be non-empty if MigrationRefreshType is chosen to be full-load-and-cdc
+  CdcOneTime:
+    RuleCondition: !Equals [ !Ref MigrationRefreshType, 'cdc']
+    Assertions:
+      - Assert:
+          'Fn::Equals':
+            - Ref: ScheduleOrOneTime
+            - 'one-time'
+        AssertDescription: Schedule must be one-time if MigrationRefreshType is chosen to be cdc
+      - Assert:
+          'Fn::Not':
+            - 'Fn::Equals':
+                - Ref: CdcStartTime
+                - ''
+        AssertDescription: CdcStartTime must be non-empty if MigrationRefreshType is chosen to be cdc
+      - Assert:
+          'Fn::Not':
+            - 'Fn::Equals':
+                - Ref: StartReplicationTaskType
+                - 'reload-target'
+        AssertDescription: StartReplicationTaskType cannot be "reload-target" if MigrationRefreshType is chosen to be cdc
+Conditions:
+  ScheduledMigration:  !Equals [ !Ref ScheduleOrOneTime, 'schedule' ]
+  Migration: !Equals [ !Ref MigrationRefreshIndicator, 'data-migration']
+  Refresh: !Equals [ !Ref MigrationRefreshIndicator, 'data-refresh']
+  ResourceCreate: !Equals [ !Ref UseExistingReplicationTask, 'no']
+
 Resources:
+
+  resDMSTaskSchedulerEventRule: 
+    Condition: ScheduledMigration
+    Type: AWS::Events::Rule
+    Properties: 
+      Name: dmstask-scheduler-eventrule
+      Description: Cloudwatch event rule to trigger the Lambda function
+      ScheduleExpression: !Ref CronSchedule
+      State: "ENABLED"
+      Targets: 
+        - 
+          Arn: !GetAtt resDmsTaskStarterLambda.Arn
+          Id: "DatabaseCopyTrigger"
+
+  resDataProcessEventEnableLambdaRole:
+    Condition: ScheduledMigration
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dataprocess-eventenable-lambda-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        -
+          PolicyName: "CloudWatch-Access"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action:
+                  - logs:CreateLogStream
+                  - logs:CreateLogGroup
+                  - logs:PutLogEvents
+                Resource: "arn:aws:logs:*:*:*"
+        -
+          PolicyName: "Events-Task-Access"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:                
+              -
+                Effect: Allow
+                Action:
+                  - events:EnableRule
+                Resource: 
+                - !Join ['',['arn:aws:events:',!Ref 'AWS::Region',':',!Ref 'AWS::AccountId',':rule/dmstask-scheduler-eventrule']]                
+                
+  resDataProcessEventEnableLambda:
+    Condition: ScheduledMigration
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: dataprocess-eventenable-lambda
+      Handler: index.handler
+      Environment:
+        Variables:
+          dmstaskschedulereventrule: dmstask-scheduler-eventrule
+      Runtime: python3.6
+      Description: This function enables cloudwatch rule
+      MemorySize: 128
+      Timeout: 300
+      Role: !GetAtt resDataProcessEventEnableLambdaRole.Arn
+      Code:
+        ZipFile: |        
+          import os, boto3, logging
+          
+          log = logging.getLogger()
+          log.setLevel(logging.INFO)
+          
+          cwe_client = boto3.client('events')
+          
+          def enable_cw_eventrule():
+              
+              cwe_client.enable_rule(Name=os.environ['dmstaskschedulereventrule'])
+              log.info("Cloudwatch event enabled successfully...")
+          
+          def handler(event, context):
+              
+              sns_dms_notification_message = event['Records'][0]['Sns']['Message']
+              log.info("Message from DMS task is : {}".format(sns_dms_notification_message))
+              
+              dms_task_stop_text = 'Replication task has stopped.'
+              dms_task_stop_reason = 'FULL_LOAD_ONLY_FINISHED.'
+              
+              if dms_task_stop_text in sns_dms_notification_message:
+                  if dms_task_stop_reason in sns_dms_notification_message:
+                      log.info("Task completed successfully...")
+                      enable_cw_eventrule()
+                  else:
+                      log.info("DMS Task not stopped properly... Please check... ")
+              else:
+                  log.info("Inappropriate event...")
+
+  resDmsTaskStarterLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dms-task-starter-lambda-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        -
+          PolicyName: "CloudWatch-Access"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action:
+                  - logs:CreateLogStream
+                  - logs:CreateLogGroup
+                  - logs:PutLogEvents
+                Resource: "arn:aws:logs:*:*:*"
+        -
+          PolicyName: "DMS-Task-Access"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:                
+              -
+                Effect: Allow
+                Action:
+                  - dms:StartReplicationTask
+                  - dms:DescribeReplicationTasks
+                Resource: "*"
+        -
+          PolicyName: "Events-Task-Access"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:                
+              -
+                Effect: Allow
+                Action:
+                  - events:DisableRule
+                Resource: 
+                - !Join ['',['arn:aws:events:',!Ref 'AWS::Region',':',!Ref 'AWS::AccountId',':rule/dmstask-scheduler-eventrule']]                
+
+  resDmsTaskStarterLambda:
+    DependsOn:
+      - "MyReplicationTask"
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: dms-task-starter-lambda
+      Handler: index.handler
+      Environment:
+        Variables:
+          dmstaskschedulereventrule: !If [ScheduledMigration, "dmstask-scheduler-eventrule", !Ref "AWS::NoValue"]
+          dmstaskname: !If [ResourceCreate, !Ref ReplicationTaskIdentifier, !Ref ExistingDmsReplicationTaskName]
+          scheduledmigrationindicator: !Ref ScheduleOrOneTime
+          migrationrefreshtype: !Ref MigrationRefreshType
+          cdcstarttime: !Ref CdcStartTime
+          startreplicationraskrype: !Ref StartReplicationTaskType
+      Runtime: python3.6
+      Description: This function triggers the DMS task and disables the cloudwatch event rule
+      MemorySize: 128
+      Timeout: 300
+      Role: !GetAtt resDmsTaskStarterLambdaRole.Arn
+      Code:
+        ZipFile: |
+          import boto3, logging, os
+          from botocore.config import Config
+          
+          log = logging.getLogger()
+          log.setLevel(logging.INFO)
+          
+          dms_client = boto3.client('dms')
+          cwe_client = boto3.client('events')
+          lambda_client = boto3.client('lambda')
+          
+          def check_task_status(dms_task_name):
+              
+              try:
+                  task = dms_client.describe_replication_tasks(
+                      Filters=[{'Name': 'replication-task-id','Values': [dms_task_name]}])['ReplicationTasks'][0]
+
+                  log.info('Task {} status : {}...'.format(task['ReplicationTaskIdentifier'],task['Status']))
+
+                  if task['Status'] == 'stopped':
+                      log.info('Task {} {}...'.format(task['ReplicationTaskIdentifier'],task['StopReason']))            
+                  
+                  return task
+              except:
+                  log.info("ERROR checking the status of the task - {}... Please check...".format(dms_task_name))
+
+          def start_task(dms_task_name):
+              
+              try:                  
+                  dms_task_arn = dms_client.describe_replication_tasks(
+                              Filters=[{'Name': 'replication-task-id','Values': [dms_task_name]}])['ReplicationTasks'][0]["ReplicationTaskArn"]
+                  if os.environ['migrationrefreshtype'] == 'cdc' or os.environ['migrationrefreshtype'] == 'full-load-and-cdc':
+                      if os.environ['cdcstarttime'] != '':
+                          task = dms_client.start_replication_task(
+                              ReplicationTaskArn=dms_task_arn,
+                              StartReplicationTaskType=os.environ['startreplicationraskrype'],
+                              CdcStartTime=os.environ['cdcstarttime']
+                              )['ReplicationTask']
+                      else:
+                          log.info('CDC start time cannot be empty for this migration type involving CDC...')
+                  else:
+                      task = dms_client.start_replication_task(
+                          ReplicationTaskArn=dms_task_arn,
+                          StartReplicationTaskType=os.environ['startreplicationraskrype'],
+                          )['ReplicationTask']
+
+                      log.info('Task {} has started successfully...'.format(task['ReplicationTaskIdentifier']))    
+                      return task['Status']         
+              except:
+                  log.info("ERROR starting the DMS task - {}... Please check...".format(dms_task_name))
+          
+          def disable_cw_eventrule(event_rule_name):
+              
+              try:
+                  cwe_client.disable_rule(Name=event_rule_name)
+                  log.info('Cloud watch event rule disabled successfully...')
+                  return True
+              except:
+                  log.info('ERROR disabling cloud watch event rule - {}... Please check...'.format(event_rule_name))
+                  return False
+          
+          def handler(event, context):
+              
+              dms_task_name = os.environ['dmstaskname']
+              task_stop_status = ['stopped','failed','ready']
+              
+              task_status = check_task_status(dms_task_name)
+              if task_status['MigrationType'] != os.environ['migrationrefreshtype']:
+                log.info('DMS Task MigrationType - "{}" did not match with the chosen MigrationRefreshType value "{}"'.format(task_status['MigrationType'],os.environ['migrationrefreshtype']))
+              else:
+                if task_status['Status'] in task_stop_status:
+                  log.info('DMS Task in stopped status... Proceeding to start the replication...')
+                  if os.environ['scheduledmigrationindicator'] == 'schedule':
+                    event_rule_name = os.environ['dmstaskschedulereventrule']
+                    if disable_cw_eventrule(event_rule_name):
+                      start_task(dms_task_name)
+                  else:
+                    start_task(dms_task_name)
+                else:
+                  log.info('DMS Task - {} not in stopped status... Please check...'.format(dms_task_name))
+                        
+  resPermissionForEventsToInvokeLambda: 
+    Condition: ScheduledMigration
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref resDmsTaskStarterLambda
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: 
+        Fn::GetAtt: 
+          - "resDMSTaskSchedulerEventRule"
+          - "Arn"
+          
+  resPermissionForSnsToInvokeLambda: 
+    Condition: ScheduledMigration
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref resDataProcessEventEnableLambda
+      Action: "lambda:InvokeFunction"
+      Principal: "sns.amazonaws.com"
+      SourceArn: !Ref resSnsTopicForDms
+
+  resSnsTopicForDms: 
+    Condition: ScheduledMigration
+    Type: AWS::SNS::Topic
+    Properties: 
+      TopicName: dms-task-statechange-topic
+      Subscription: 
+        - 
+          Endpoint: !GetAtt resDataProcessEventEnableLambda.Arn
+          Protocol: "lambda"
+          
+  resDmsTaskSubscription:
+    Condition: ScheduledMigration
+    DependsOn:
+      - "MyReplicationTask"
+    Type: AWS::DMS::EventSubscription
+    Properties:
+      SubscriptionName: dmstasksubscription
+      Enabled: true
+      SourceType: replication-task
+      EventCategories:
+        - state change
+      SnsTopicArn: !Ref resSnsTopicForDms
+      SourceIds:
+        - !If [ResourceCreate, !Ref ReplicationTaskIdentifier, !Ref ExistingDmsReplicationTaskName]
   onpremVPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -419,7 +845,7 @@ Resources:
       DBSecurityGroups:
         - !Ref MyDBSecurityGroup
       Engine: MariaDB
-      EngineVersion: 10.0.24
+      EngineVersion: 10.4
       MasterUserPassword: !Ref DBPassword
       MasterUsername: !Ref DBUser
       MaxAllocatedStorage: 30
@@ -541,11 +967,22 @@ Resources:
   MyReplicationTask:
     Type: AWS::DMS::ReplicationTask
     Properties:
-      MigrationType: full-load-and-cdc #required
+      MigrationType: full-load #required
+      ReplicationTaskIdentifier: !Ref ReplicationTaskIdentifier
       ReplicationInstanceArn: !Ref MyReplicationInstance  #required
       SourceEndpointArn: !Ref MyReplicationSourceInstanceEndpoint #required
+      ReplicationTaskSettings: "{
+          \"ValidationSettings\":   {
+            \"EnableValidation\":true
+          },
+          \"Logging\": {
+            \"EnableLogging\": true
+          }
+      }"
       TableMappings: "{ \"rules\": [ { \"rule-type\": \"selection\", \"rule-id\": \"1\", \"rule-name\": \"1\", \"object-locator\": { \"schema-name\": \"a4lwordpress\", \"table-name\": \"%\" }, \"rule-action\": \"include\" } ] }" #required
       TargetEndpointArn: !Ref MyReplicationTargetInstanceEndpoint #required
+
+
 Outputs:
   WebsiteURL:
     Value: !Sub
@@ -557,4 +994,20 @@ Outputs:
       - http://${PublicAddress}
       - PublicAddress: !GetAtt awsCatWeb.PublicDnsName
     Description: DMS Application URL
-
+  CloudWatchEventRule:
+    Condition: ScheduledMigration
+    Description: Cloudwatch event rule which schedules the data migrtion/refresh
+    Value: !Ref resDMSTaskSchedulerEventRule
+  SnsTopicName:
+    Condition: ScheduledMigration
+    Description: SNS Topic subscribed to AWS DMS events
+    Value: !GetAtt
+      - resSnsTopicForDms
+      - TopicName
+  TaskStarterLambda:
+    Description: Lambda function which triggers the DMS task
+    Value: !Ref resDmsTaskStarterLambda
+  PostProcessorLambda:
+    Condition: ScheduledMigration
+    Description: Lambda function which performs the post processing data activities
+    Value: !Ref resDataProcessEventEnableLambda
