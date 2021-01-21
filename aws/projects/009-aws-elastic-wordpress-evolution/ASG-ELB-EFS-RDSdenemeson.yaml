@@ -1,0 +1,717 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: |
+  CloudFormation Template for Wordpress on EC2.
+  This template deploys Wordpress on Amazon Linux 2
+  (ami-09d95fab7fff3776c) EC2 Instance with custom security group 
+  allowing http connections on port 80. 
+Parameters:
+  KeyName:
+    Description: The EC2 Key Pair to allow SSH access to the instances
+    Type: AWS::EC2::KeyPair::KeyName
+
+  PolicyTargetValue:
+    Description: Please enter your Target value that triggers the Autoscaling
+    Default: '60'
+    Type: String
+
+  MyInstanceType:
+    Description: WebServer EC2 instance type
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - t1.micro
+      - m1.small
+      - m1.medium
+      - m1.large
+    ConstraintDescription: must be a valid EC2 instance type.
+Mappings:
+  RegionImageMap:
+    us-east-1:
+      AMI: ami-0c94855ba95c71c99
+    us-east-2:
+      AMI: ami-0603cbe34fd08cb81
+    us-west-1:
+      AMI: ami-0e65ed16c9bf1abc7
+    us-west-2:
+      AMI: ami-0841edc20334f9287
+    eu-west-1:
+      AMI: ami-08a2aed6e0a6f9c7d
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.16.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: A4LVPC
+  IPv6CidrBlock:
+    Type: AWS::EC2::VPCCidrBlock
+    Properties:
+      VpcId: !Ref VPC
+      AmazonProvidedIpv6CidrBlock: true
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+      - Key: Name
+        Value: A4L-IGW
+  InternetGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+  RTPub: 
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: A4L-vpc-rt-pub
+  RTPubDefaultIPv4: 
+    Type: 'AWS::EC2::Route'
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId:
+        Ref: RTPub
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId:
+        Ref: InternetGateway
+  RTPubDefaultIPv6: 
+    Type: 'AWS::EC2::Route'
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId:
+        Ref: RTPub
+      DestinationIpv6CidrBlock: '::/0'
+      GatewayId:
+        Ref: InternetGateway
+  RTAssociationPubA:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SNPUBA
+      RouteTableId:
+        Ref: RTPub
+  RTAssociationPubB:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SNPUBB
+      RouteTableId:
+        Ref: RTPub
+  RTAssociationPubC:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SNPUBC
+      RouteTableId:
+        Ref: RTPub
+  SNDBA:
+    Type: AWS::EC2::Subnet
+    DependsOn: IPv6CidrBlock
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 10.16.16.0/20
+      AssignIpv6AddressOnCreation: true
+      Ipv6CidrBlock: 
+        Fn::Sub:
+          - "${VpcPart}${SubnetPart}"
+          - SubnetPart: '01::/64'
+            VpcPart: !Select [ 0, !Split [ '00::/56', !Select [ 0, !GetAtt VPC.Ipv6CidrBlocks ]]]
+      Tags:
+        - Key: Name
+          Value: sn-db-A
+  SNDBB:
+    Type: AWS::EC2::Subnet
+    DependsOn: IPv6CidrBlock
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: 10.16.80.0/20
+      AssignIpv6AddressOnCreation: true
+      Ipv6CidrBlock: 
+        Fn::Sub:
+          - "${VpcPart}${SubnetPart}"
+          - SubnetPart: '05::/64'
+            VpcPart: !Select [ 0, !Split [ '00::/56', !Select [ 0, !GetAtt VPC.Ipv6CidrBlocks ]]]
+      Tags:
+        - Key: Name
+          Value: sn-db-B
+  SNDBC:
+    Type: AWS::EC2::Subnet
+    DependsOn: IPv6CidrBlock
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      CidrBlock: 10.16.144.0/20
+      AssignIpv6AddressOnCreation: true
+      Ipv6CidrBlock: 
+        Fn::Sub:
+          - "${VpcPart}${SubnetPart}"
+          - SubnetPart: '09::/64'
+            VpcPart: !Select [ 0, !Split [ '00::/56', !Select [ 0, !GetAtt VPC.Ipv6CidrBlocks ]]]
+      Tags:
+        - Key: Name
+          Value: sn-db-C
+  SNAPPA:
+    Type: AWS::EC2::Subnet
+    DependsOn: IPv6CidrBlock
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 10.16.32.0/20
+      AssignIpv6AddressOnCreation: true
+      Ipv6CidrBlock: 
+        Fn::Sub:
+          - "${VpcPart}${SubnetPart}"
+          - SubnetPart: '02::/64'
+            VpcPart: !Select [ 0, !Split [ '00::/56', !Select [ 0, !GetAtt VPC.Ipv6CidrBlocks ]]]
+      Tags:
+        - Key: Name
+          Value: sn-app-A
+  SNAPPB:
+    Type: AWS::EC2::Subnet
+    DependsOn: IPv6CidrBlock
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: 10.16.96.0/20
+      AssignIpv6AddressOnCreation: true
+      Ipv6CidrBlock: 
+        Fn::Sub:
+          - "${VpcPart}${SubnetPart}"
+          - SubnetPart: '06::/64'
+            VpcPart: !Select [ 0, !Split [ '00::/56', !Select [ 0, !GetAtt VPC.Ipv6CidrBlocks ]]]
+      Tags:
+        - Key: Name
+          Value: sn-app-B
+  SNAPPC:
+    Type: AWS::EC2::Subnet
+    DependsOn: IPv6CidrBlock
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      CidrBlock: 10.16.160.0/20
+      AssignIpv6AddressOnCreation: true
+      Ipv6CidrBlock: 
+        Fn::Sub:
+          - "${VpcPart}${SubnetPart}"
+          - SubnetPart: '0A::/64'
+            VpcPart: !Select [ 0, !Split [ '00::/56', !Select [ 0, !GetAtt VPC.Ipv6CidrBlocks ]]]
+      Tags:
+        - Key: Name
+          Value: sn-app-C
+  SNPUBA:
+    Type: AWS::EC2::Subnet
+    DependsOn: IPv6CidrBlock
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 10.16.48.0/20
+      MapPublicIpOnLaunch: true
+      Ipv6CidrBlock: 
+        Fn::Sub:
+          - "${VpcPart}${SubnetPart}"
+          - SubnetPart: '03::/64'
+            VpcPart: !Select [ 0, !Split [ '00::/56', !Select [ 0, !GetAtt VPC.Ipv6CidrBlocks ]]]
+      Tags:
+        - Key: Name
+          Value: sn-pub-A
+  SNPUBB:
+    Type: AWS::EC2::Subnet
+    DependsOn: IPv6CidrBlock
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: 10.16.112.0/20
+      MapPublicIpOnLaunch: true
+      Ipv6CidrBlock: 
+        Fn::Sub:
+          - "${VpcPart}${SubnetPart}"
+          - SubnetPart: '07::/64'
+            VpcPart: !Select [ 0, !Split [ '00::/56', !Select [ 0, !GetAtt VPC.Ipv6CidrBlocks ]]]
+      Tags:
+        - Key: Name
+          Value: sn-pub-B
+  SNPUBC:
+    Type: AWS::EC2::Subnet
+    DependsOn: IPv6CidrBlock
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      CidrBlock: 10.16.176.0/20
+      MapPublicIpOnLaunch: true
+      Ipv6CidrBlock: 
+        Fn::Sub:
+          - "${VpcPart}${SubnetPart}"
+          - SubnetPart: '0B::/64'
+            VpcPart: !Select [ 0, !Split [ '00::/56', !Select [ 0, !GetAtt VPC.Ipv6CidrBlocks ]]]
+      Tags:
+        - Key: Name
+          Value: sn-pub-C
+  IPv6WorkaroundSubnetPUBA:
+    Type: Custom::SubnetModify
+    Properties:
+      ServiceToken: !GetAtt IPv6WorkaroundLambda.Arn
+      SubnetId: !Ref SNPUBA
+  IPv6WorkaroundSubnetPUBB:
+    Type: Custom::SubnetModify
+    Properties:
+      ServiceToken: !GetAtt IPv6WorkaroundLambda.Arn
+      SubnetId: !Ref SNPUBB
+  IPv6WorkaroundSubnetPUBC:
+    Type: Custom::SubnetModify
+    Properties:
+      ServiceToken: !GetAtt IPv6WorkaroundLambda.Arn
+      SubnetId: !Ref SNPUBC
+  IPv6WorkaroundRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: !Sub "ipv6-fix-logs-${AWS::StackName}"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              Resource: arn:aws:logs:*:*:*
+        - PolicyName: !Sub "ipv6-fix-modify-${AWS::StackName}"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - ec2:ModifySubnetAttribute
+              Resource: "*"
+  IPv6WorkaroundLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: "index.lambda_handler"
+      Code: #import cfnresponse below required to send respose back to CFN
+        ZipFile:
+          Fn::Sub: |
+            import cfnresponse
+            import boto3
+
+            def lambda_handler(event, context):
+                if event['RequestType'] is 'Delete':
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS)
+                  return
+
+                responseValue = event['ResourceProperties']['SubnetId']
+                ec2 = boto3.client('ec2', region_name='${AWS::Region}')
+                ec2.modify_subnet_attribute(AssignIpv6AddressOnCreation={
+                                                'Value': True
+                                              },
+                                              SubnetId=responseValue)
+                responseData = {}
+                responseData['SubnetId'] = responseValue
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, "CustomResourcePhysicalID")
+      Runtime: python3.8
+      Role: !GetAtt IPv6WorkaroundRole.Arn
+      Timeout: 30
+  SGWordpress:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: Control access to Wordpress Instance(s)
+      SecurityGroupIngress: 
+        - Description: 'Allow HTTP IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref SGLoadBalancer
+        - Description: 'Allow SSH IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: '0.0.0.0/0'
+        - Description: 'Allow MySQL IN'
+          IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: '0.0.0.0/0'
+  SGDatabase:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: Control access to Database
+      SecurityGroupIngress: 
+        - Description: 'Allow MySQL IN'
+          IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: '0.0.0.0/0'
+        - Description: 'Allow SSH IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: '0.0.0.0/0'
+        - Description: 'Allow HTTP IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: '0.0.0.0/0'
+  SGLoadBalancer:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: Control access to Load Balancer
+      SecurityGroupIngress: 
+        - Description: 'Allow HTTP IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: '0.0.0.0/0'
+  SGEFS:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: Control access to EFS
+      SecurityGroupIngress: 
+        - Description: 'Allow NFS/EFS IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          SourceSecurityGroupId: !Ref SGWordpress
+  WordpressRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/AmazonElasticFileSystemClientFullAccess
+  WordpressInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: /
+      Roles:
+        - !Ref WordpressRole
+
+  MyLaunchTemplate:
+    DependsOn:
+      - "EFSMountTarget1"
+      - "EFSMountTarget2"
+      - "EFSMountTarget3"
+    Type: "AWS::EC2::LaunchTemplate"
+    Properties:
+      LaunchTemplateData:
+        ImageId: !FindInMap 
+          - RegionImageMap
+          - !Ref AWS::Region
+          - AMI
+        IamInstanceProfile:
+          Arn: !GetAtt
+            - WordpressInstanceProfile
+            - Arn
+        InstanceType: !Ref MyInstanceType
+        KeyName: !Ref KeyName
+        SecurityGroupIds:
+          - !GetAtt SGWordpress.GroupId
+        UserData:
+            Fn::Base64:
+              !Sub
+                - |
+
+                  #!/bin/bash -xe
+
+                  DBPassword=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/DBPassword --with-decryption --query Parameters[0].Value)
+                  DBPassword=`echo $DBPassword | sed -e 's/^"//' -e 's/"$//'`
+
+                  DBRootPassword=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/DBRootPassword --with-decryption --query Parameters[0].Value)
+                  DBRootPassword=`echo $DBRootPassword | sed -e 's/^"//' -e 's/"$//'`
+
+                  DBUser=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/DBUser --query Parameters[0].Value)
+                  DBUser=`echo $DBUser | sed -e 's/^"//' -e 's/"$//'`
+
+                  DBName=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/DBName --query Parameters[0].Value)
+                  DBName=`echo $DBName | sed -e 's/^"//' -e 's/"$//'`
+
+                  DBEndpoint=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/DBEndpoint --query Parameters[0].Value)
+                  DBEndpoint=`echo $DBEndpoint | sed -e 's/^"//' -e 's/"$//'`
+
+                  yum -y update
+
+                  yum install -y mariadb-server httpd wget
+                  amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+                  yum -y install amazon-efs-utils
+
+                  systemctl enable httpd
+                  systemctl enable mariadb
+                  systemctl start httpd
+                  systemctl start mariadb
+
+                  mkdir -p /var/www/html/wp-content
+                  chown -R ec2-user:apache /var/www/
+                  echo -e "'${DIR_SRC}':/ /var/www/html/wp-content efs _netdev,tls,iam 0 0" >> /etc/fstab
+                  mount -a -t efs defaults
+                  
+                  mysqladmin -u root password $DBRootPassword
+
+                  cd /home/ec2-user
+                  wget https://github.com/mehmetafsar510/aws_devops/raw/master/teamwork-agendas/html.zip
+                  unzip html.zip 
+                  cd /home/ec2-user/html
+                  cp * -R /var/www/html/
+                  usermod -a -G apache ec2-user   
+                  chown -R ec2-user:apache /var/www
+                  chmod 2775 /var/www
+                  find /var/www -type d -exec chmod 2775 {} \;
+                  find /var/www -type f -exec chmod 0664 {} \;
+                  systemctl restart httpd
+                  cd /var/www/html
+                  cp ./wp-config-sample.php ./wp-config.php
+                  sed -i "s/'database_name_here'/'$DBName'/g" wp-config.php
+                  sed -i "s/'username_here'/'$DBUser'/g" wp-config.php
+                  sed -i "s/'password_here'/'$DBPassword'/g" wp-config.php
+                  sed -i "s/'localhost'/'$DBEndpoint'/g" wp-config.php
+
+                  mysqldump -h '${onpremCatDB.PrivateIp}' -u $DBUser -p$DBPassword $DBName > a4lWordPress.sql
+                  mysql -h "${MyDBURI}" -u $DBUser -p$DBPassword $DBName < a4lWordPress.sql
+
+                  sed -i "s/'localhost'/'${MyDBURI}'/g" /var/www/html/wp-config.php
+                  systemctl restart httpd
+                  
+                  cat >> /home/ec2-user/update_wp_ip.sh<< 'EOF'
+                  #!/bin/bash
+                  source <(php -r 'require("/var/www/html/wp-config.php"); echo("DB_NAME=".DB_NAME."; DB_USER=".DB_USER."; DB_PASSWORD=".DB_PASSWORD."; DB_HOST=".DB_HOST); ')
+                  SQL_COMMAND="mysql -u $DB_USER -h $DB_HOST -p$DB_PASSWORD $DB_NAME -e"
+                  OLD_URL=$(mysql -u $DB_USER -h $DB_HOST -p$DB_PASSWORD $DB_NAME -e 'select option_value from wp_options where option_id = 1;' | grep http)
+                 
+                  $SQL_COMMAND "UPDATE wp_options SET option_value = replace(option_value, '$OLD_URL', 'http://${ALBDNSNAME})' WHERE option_name = 'home' OR option_name = 'siteurl';"
+                  $SQL_COMMAND "UPDATE wp_posts SET guid = replace(guid, '$OLD_URL','http://${ALBDNSNAME}');"
+                  $SQL_COMMAND "UPDATE wp_posts SET post_content = replace(post_content, '$OLD_URL', 'http://${ALBDNSNAME}');"
+                  $SQL_COMMAND "UPDATE wp_postmeta SET meta_value = replace(meta_value,'$OLD_URL','http://${ALBDNSNAME}');"
+                  EOF
+
+                  chmod 755 /home/ec2-user/update_wp_ip.sh
+                  chmod +x /etc/rc.d/rc.local
+                  echo "/home/ec2-user/update_wp_ip.sh" >> /etc/rc.d/rc.local
+                  /home/ec2-user/update_wp_ip.sh
+
+                - MyDBURI: !GetAtt MyDatabaseServer.Endpoint.Address
+                  DIR_SRC: !Ref EFSFileSystem
+                  ALBDNSNAME: !GetAtt ALB.DNSName
+                  
+               
+  onpremCatDB:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - "MyDatabaseServer"
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+    Properties:
+      InstanceType: "t2.micro"
+      ImageId: "ami-0319a571f9ff661d7"
+      IamInstanceProfile: !Ref WordpressInstanceProfile
+      SubnetId: !Ref SNPUBA
+      KeyName: !Ref KeyName
+      SecurityGroupIds: 
+        - !Ref SGWordpress
+      Tags:
+        - Key: Name
+          Value: CatDB
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackId} --resource onpremCatDB --region ${AWS::Region}
+
+  onpremCatWeb:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - "onpremCatDB"
+    Properties:
+      InstanceType: "t2.micro"
+      ImageId: "ami-0bf6ba120443f8e1f"
+      KeyName: !Ref KeyName
+      IamInstanceProfile: !Ref WordpressInstanceProfile
+      SubnetId: !Ref SNPUBA
+      SecurityGroupIds: 
+        - !Ref SGDatabase
+      Tags:
+        - Key: Name
+          Value: CatWeb
+      UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash -xe
+            # Configure Wordpress
+            cd /var/www/html
+            cp ./wp-config-sample.php ./wp-config.php
+            sed -i "s/'localhost'/'${onpremCatDB.PrivateIp}'/g" wp-config.php
+            sed -i "s/'database_name_here'/'$DBName'/g" wp-config.php
+            sed -i "s/'username_here'/'$DBUser'/g" wp-config.php
+            sed -i "s/'password_here'/'$DBPassword'/g" wp-config.php
+            /home/ec2-user/update_wp_ip.sh
+                
+
+  MyDBSubnetGroup:
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      DBSubnetGroupDescription: Subnets available for the RDS DB Instance
+      SubnetIds:
+        - !Ref SNDBA
+        - !Ref SNDBB
+        - !Ref SNDBC
+  MyDBSecurityGroup:
+    Type: "AWS::RDS::DBSecurityGroup"
+    Properties:
+      DBSecurityGroupIngress: #required
+        - EC2SecurityGroupId: !GetAtt SGWordpress.GroupId
+      EC2VpcId: !Ref VPC
+      GroupDescription: Security group for RDS DB Instance. #required
+
+  MyDatabaseServer:
+    Type: "AWS::RDS::DBInstance"
+    DeletionPolicy: Delete
+    Properties:
+      AllocatedStorage: "20"
+      AllowMajorVersionUpgrade: false
+      AutoMinorVersionUpgrade: true
+      BackupRetentionPeriod: 0
+      DBInstanceClass: db.t2.micro #required
+      DBName: a4lwordpress
+      DBSubnetGroupName: !Ref MyDBSubnetGroup
+      DeleteAutomatedBackups: true
+      DeletionProtection: false
+      DBSecurityGroups:
+        - !Ref MyDBSecurityGroup
+      Engine: MySQL
+      EngineVersion: 8.0.20
+      MasterUserPassword: cats-dogs-rabbits-chickens
+      MasterUsername: a4lwordpress
+      MaxAllocatedStorage: 30
+      PreferredBackupWindow: 03:00-04:00
+      MultiAZ: false
+      Port: "3306"
+      VPCSecurityGroups:
+        - !Ref MyDBSecurityGroup
+
+  EFSFileSystem:
+    Type: 'AWS::EFS::FileSystem'
+    Properties:
+      PerformanceMode: generalPurpose
+      Encrypted: true
+      ThroughputMode: bursting
+      BackupPolicy:
+        Status: DISABLED    
+
+  EFSMountTarget1:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref EFSFileSystem
+      SecurityGroups:
+        - !GetAtt 
+          - SGEFS
+          - GroupId
+      SubnetId:  !Ref SNAPPA
+  EFSMountTarget2:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref EFSFileSystem
+      SecurityGroups:
+        - !GetAtt 
+          - SGEFS
+          - GroupId
+      SubnetId:  !Ref SNAPPB
+  EFSMountTarget3:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref EFSFileSystem
+      SecurityGroups:
+        - !GetAtt 
+          - SGEFS
+          - GroupId
+      SubnetId:  !Ref SNAPPC
+
+  WebServerTG:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+    Properties:
+      Port: 80
+      Protocol: HTTP
+      TargetType: instance
+      VpcId: !Ref VPC
+  
+  ALB:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+      IpAddressType: ipv4
+      Scheme: internet-facing
+      SecurityGroups:
+        - !GetAtt SGLoadBalancer.GroupId
+      Subnets:
+        - !Ref SNPUBA
+        - !Ref SNPUBB
+        - !Ref SNPUBC
+      Type: application
+
+  ALBListener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties:
+      DefaultActions: #required
+        - TargetGroupArn: !Ref WebServerTG
+          Type: forward
+      LoadBalancerArn: !Ref ALB #required
+      Port: 80 #required
+      Protocol: HTTP #required
+
+  WebServerASG:
+    Type: "AWS::AutoScaling::AutoScalingGroup"
+    DependsOn: MyDatabaseServer
+    Properties:
+      Cooldown: "200"
+      DesiredCapacity: "2"
+      HealthCheckGracePeriod: 90
+      HealthCheckType: ELB
+      LaunchTemplate:
+        LaunchTemplateId: !Ref MyLaunchTemplate
+        Version: !GetAtt MyLaunchTemplate.LatestVersionNumber
+      MaxSize: "3" #required
+      MinSize: "1" #required
+      TargetGroupARNs:
+        - !Ref WebServerTG
+      VPCZoneIdentifier:
+          - !Ref SNPUBA
+          - !Ref SNPUBB
+          - !Ref SNPUBC
+  myCPUPolicy:
+    Type: "AWS::AutoScaling::ScalingPolicy"
+    Properties:
+      AutoScalingGroupName: !Ref WebServerASG
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: !Ref PolicyTargetValue
+Outputs:
+  ALBDnsName:
+    Description: URL to access the Application Load Balance
+    Value: !Join 
+      - ''
+      - - 'http://'
+        - !GetAtt 
+          - ALB
+          - DNSName
