@@ -284,7 +284,7 @@ kubectl get pods -o wide --all-namespaces
 kubectl run nginx-server --image=nginx  --port=80
 ```
 
-- Get the list of pods in default namespace on master and check the status and readyness of `nginx-server`
+- Get the list of pods in default namespace on master and check the status and readiness of `nginx-server`
 
 ```bash
 kubectl get pods -o wide
