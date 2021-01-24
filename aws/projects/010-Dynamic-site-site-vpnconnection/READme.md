@@ -34,7 +34,7 @@ Click `Connect`
 This is is the file which configures the IPSEC Tunnel interfaces over which our VPN traffic flows.
 This configures the ones for ROUTER1 -> BOTH AWS Endpoints
 
-Replace the following placeholders with the real values in the `DemoValueTemplate.md` document
+Replace the following placeholders with the real values in the `DemoValueTemplate.md`(you have change your own configuration. Download it vpn connection part than change this value) document
 
 - ROUTER1_PRIVATE_IP
 - CONN1_TUNNEL1_ONPREM_OUTSIDE_IP
