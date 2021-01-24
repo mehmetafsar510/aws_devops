@@ -6,8 +6,8 @@ We will demonstrate how to integrate an on-premises network with AWS networks vi
 
 # INITIAL SETUP OF AWS ENVIRONMENT AND SIMULATED ON-PREMISES ENVIRONMENT
 
-- Apply `AWS-VPN.yaml` [AWS-VPN](https://github.com/mehmetafsar510/aws_devops/blob/master/aws/projects/009-aws-elastic-wordpress-evolution/ASG-ELB-EFS-RDSdenemeson.yaml) to the `us-east-1` region in your AWS account (Call it AWS) - If prompted ... check capabilities Box
-- Apply `ONPREM-VPN.yaml` [ONPREM-VPN](https://github.com/mehmetafsar510/aws_devops/blob/master/aws/projects/009-aws-elastic-wordpress-evolution/ASG-ELB-EFS-RDSdenemeson.yaml)  to the `us-east-1` region in your AWS account (Call it OMPREM) - If prompted ... check capabilities Box
+- Apply `AWS-VPN.yaml` [AWS-VPN](https://github.com/mehmetafsar510/aws_devops/blob/master/aws/projects/010-Dynamic-site-site-vpnconnection/AWS-VPN.yaml) to the `us-east-1` region in your AWS account (Call it AWS) - If prompted ... check capabilities Box
+- Apply `ONPREM-VPN.yaml` [ONPREM-VPN](https://github.com/mehmetafsar510/aws_devops/blob/master/aws/projects/010-Dynamic-site-site-vpnconnection/ONPREM-VPN.yaml)  to the `us-east-1` region in your AWS account (Call it OMPREM) - If prompted ... check capabilities Box
 
 Wait for both stacks to move into a `CREATE_COMPLETE` status **Estimated time to complete 5-10 mins**
 

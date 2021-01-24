@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description:  CloudFormation Template for Dynamic Site-to-Site VPN. This template creates AWS Sımulated environment.
+Description:  CloudFormation Template for Dynamic Site-to-Site VPN. This template creates AWS Sımulated environment. First upload this template.
 Parameters:
   LatestAmiId:
     Description: AMI for Bastion Host (default is latest AmaLinux2)
