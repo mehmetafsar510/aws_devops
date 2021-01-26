@@ -1,6 +1,6 @@
 # Highly-Available Dynamic Site-to-Site VPN
 
-We will demonstrate how to integrate an on-premises network with AWS networks via AWS site-to-site VPN connections and either AWS Virtual Private Gateways (VGWs) or AWS Transit Gateways (TGWs) using AWS Cloudformation Service.
+I will demonstrate how to integrate an on-premises network with AWS networks via AWS site-to-site VPN connections and either AWS Virtual Private Gateways (VGWs) or AWS Transit Gateways (TGWs) using AWS Cloudformation Service.
 
 ![Architecture](pic1.png)
 
