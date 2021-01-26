@@ -1,6 +1,6 @@
 # Hybrid Directory between AWS and Simulated On-Premises
 
-You will get the chance to experience how to integrate the DNS platforms of AWS and a linux based, simulated on-premises environment using Route53 inbound and outbound endpoints using AWS Cloudformation..
+You will get the chance to experience how to integrate the DNS platforms of AWS and a linux based, simulated on-premises environment using Route53 inbound and outbound endpoints using AWS Cloudformation service.
 
 [HybridDNS-Template]()
 
