@@ -2,7 +2,7 @@
 
 You will get the chance to experience how to integrate the DNS platforms of AWS and a linux based, simulated on-premises environment using Route53 inbound and outbound endpoints using AWS Cloudformation service.
 
-[HybridDNS-Template]()
+[HybridDNS-Template](https://github.com/mehmetafsar510/aws_devops/blob/master/aws/projects/012-hybrid-dns-endstate/HybridDNS.yaml)
 
 ![Architecture](hybrid-dns-endstate.png)
 
