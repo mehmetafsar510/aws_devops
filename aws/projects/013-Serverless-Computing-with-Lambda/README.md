@@ -2,7 +2,7 @@
 
 You will create a website hosted on AWS S3 using AWS Lambda and Amazon API Gateway to add dynamic functionality to the site using AWS Cloudformation Service. The topics for this hands-on session will be AWS Lambda, function as a service (FaaS).
 
-[Serverless Computing with Lambda-Template](http://pg11.meetup.s3-website-us-west-2.amazonaws.com/index.html)(During upload this template, you have to upload static web site and lambda function(RomanNumbers) to s3 bucket with help of [upload-script.sh](http://pg11.meetup.s3-website-us-west-2.amazonaws.com/index.html). Otherwise you will take rollback.)
+[Serverless Computing with Lambda-Template](https://github.com/mehmetafsar510/aws_devops/blob/master/aws/projects/013-Serverless-Computing-with-Lambda/Serverless-Computing-with-lambda.yml)(During upload this template, you have to upload static web site and lambda function(RomanNumbers) to s3 bucket with help of [upload-script.sh](https://github.com/mehmetafsar510/aws_devops/blob/master/aws/projects/013-Serverless-Computing-with-Lambda/upload-script.sh). Otherwise you will take rollback.)
 
 ![Steps](pic(245).png)
 
