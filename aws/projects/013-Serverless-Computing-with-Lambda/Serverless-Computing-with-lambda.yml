@@ -1,0 +1,364 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description:
+  CloudFormation Template for Roman Number Static  web application. 
+  This application  deployed on AWS S3 as static website.
+  We deployed our code with Lambda and Api Gateway. In this 
+  template we use two s3 bucket and we take our code to diffrent
+  s3 bucket with  CORS policy. 
+Parameters:
+
+  StageName:
+    Type: String
+    Description: Name of the stage that you want the API to be deployed in.
+    Default: beta
+  
+  Key:
+    Type: String
+    Description: Zip file name
+    Default: RomanNumber.zip   
+    
+Resources:
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: mehmetafsar.com
+        S3Key: !Ref Key
+      Description: 'Roman Numaral Function use S3 and Lambda'
+      FunctionName: !Sub "${AWS::StackName}"
+      Handler: 'lambda_function.lambda_handler'
+      MemorySize: 128
+      Role:
+        Fn::GetAtt: LambdaRole.Arn
+      Runtime: python3.8
+      Timeout: 60
+  
+  GreetingLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          def lambda_handler(event, context):
+              # TODO implement
+              print("Event is %s" % event)
+              name = event.get("name") or "No msg submitted"
+              return "Hello from Lambda: %s " % (name)
+      Description: A greeting function
+      Handler: 'index.lambda_handler'
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: python3.8
+      
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      - arn:aws:iam::aws:policy/AmazonS3FullAccess
+      Path: /
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - lambda:CreateFunction
+                  - lambda:DeleteFunction
+                  - lambda:AddPermission
+                  - lambda:UpdateFunction
+                  - lambda:UpdateFunctionCode
+                  - lambda:GetFunction
+                  - lambda:GetFunctionConfiguration
+                  - lambda:UpdateFunctionConfiguration
+                  - lambda:RemovePermission
+                  - lambda:listTags
+                  - lambda:TagResource
+                  - lambda:UntagResource
+                  - apigateway:*
+                Resource: '*'
+
+  myS3CorsBucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      AccessControl: PublicRead
+      BucketName: staticwebcors2514
+      VersioningConfiguration:
+        Status: Enabled
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - GET
+            AllowedOrigins:
+              - '*'
+            MaxAge: 3000
+
+  myS3Bucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      AccessControl: PublicRead
+      BucketName: staticweb2514
+      VersioningConfiguration:
+        Status: Enabled
+      WebsiteConfiguration:
+        IndexDocument: apigw.html
+
+  myBucketCorsPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref myS3CorsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+              - s3:GetObjectVersion
+            Resource: !Join
+              - ""
+              - - !GetAtt myS3CorsBucket.Arn
+                - "/*"
+  myBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref myS3Bucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+              - s3:GetObjectVersion
+            Resource: !Join
+              - ""
+              - - !GetAtt myS3Bucket.Arn
+                - "/*"
+  MyRestApi:
+    Type: "AWS::ApiGateway::RestApi"
+    Properties:
+      Description: RomanNumbers Api
+      Name: RomanNumber
+
+  RomanNumberApiResources:
+    Type: "AWS::ApiGateway::Resource"
+    Properties:
+      ParentId: !GetAtt MyRestApi.RootResourceId #required
+      PathPart: RomanNumber #required
+      RestApiId: !Ref MyRestApi #required
+  
+  GreetingResources:
+    Type: "AWS::ApiGateway::Resource"
+    Properties:
+      ParentId: !GetAtt MyRestApi.RootResourceId #required
+      PathPart: hello #required
+      RestApiId: !Ref MyRestApi #required
+  
+  GreetingRequestGET:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: GET
+      Integration:
+        Type: AWS
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GreetingLambda.Arn}/invocations'
+        IntegrationResponses:
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: >-
+                'Content-Type,X-Amz-Date,Authorization,X-Api-Key,x-requested-with'
+              method.response.header.Access-Control-Allow-Methods: '''GET,OPTİONS'''
+              method.response.header.Access-Control-Allow-Origin: '''*'''
+            StatusCode: "200"
+        RequestTemplates:
+          application/json: |
+            {
+                "name":"$input.params('name')"
+            }
+      MethodResponses:
+        - ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+          StatusCode: "200"
+      RequestParameters:
+        method.request.querystring.name: false
+      ResourceId: !Ref GreetingResources #required
+      RestApiId: !Ref MyRestApi #required
+    
+  RomanNumberGet:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      AuthorizationType: "NONE"
+      HttpMethod: GET #required
+      Integration:
+        Type: AWS
+        IntegrationHttpMethod: POST
+        Uri: !Join 
+          - ''
+          - - 'arn:aws:apigateway:'
+            - !Ref 'AWS::Region'
+            - ':lambda:path/2015-03-31/functions/'
+            - !GetAtt 
+              - LambdaFunction
+              - Arn
+            - /invocations
+        IntegrationResponses:
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: >-
+                'Content-Type,X-Amz-Date,Authorization,X-Api-Key,x-requested-with'
+              method.response.header.Access-Control-Allow-Methods: '''GET,OPTİONS'''
+              method.response.header.Access-Control-Allow-Origin: '''*'''
+            StatusCode: "200"
+      MethodResponses:
+        - ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+          StatusCode: "200"
+      RequestParameters:
+        method.request.querystring.name: false
+      ResourceId: !Ref RomanNumberApiResources #required
+      RestApiId: !Ref MyRestApi #required
+
+  RomanNumberOption:
+    Type: 'AWS::ApiGateway::Method'
+    Properties:
+      AuthorizationType: NONE
+      RestApiId: !Ref MyRestApi
+      ResourceId: !Ref RomanNumberApiResources
+      HttpMethod: OPTIONS
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: >-
+                'Content-Type,X-Amz-Date,Authorization,X-Api-Key,x-requested-with'
+              method.response.header.Access-Control-Allow-Methods: '''GET,OPTIONS'''
+              method.response.header.Access-Control-Allow-Origin: '''*'''
+            StatusCode: "200"
+      MethodResponses:
+        - ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+          StatusCode: "200"
+
+  ApiGatewayStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      DeploymentId: !Ref RomanNUmberApiDeployment
+      MethodSettings:
+        - DataTraceEnabled: true
+          HttpMethod: "*"
+          ResourcePath: "/*"
+      RestApiId: !Ref MyRestApi
+      StageName: LATEST
+ 
+  GreetingStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      DeploymentId: !Ref GreetingApiDeployment
+      MethodSettings:
+        - DataTraceEnabled: true
+          HttpMethod: "*"
+          ResourcePath: "/*"
+      RestApiId: !Ref MyRestApi
+      StageName: dev
+
+  RomanNUmberApiDeployment:
+    DependsOn:
+      - RomanNumberGet
+      - RomanNumberOption
+    Type: "AWS::ApiGateway::Deployment"
+    Properties:
+      Description: Lambda API Deployment
+      RestApiId: !Ref MyRestApi #required
+      StageName: !Ref StageName
+
+  GreetingApiDeployment:
+    DependsOn:
+      - RomanNumberGet
+    Type: "AWS::ApiGateway::Deployment"
+    Properties:
+      Description: Lambda API Deployment
+      RestApiId: !Ref MyRestApi #required
+      StageName: !Ref StageName
+  
+  LambdaApiGatewayInvoke:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      Action: "lambda:invokeFunction"
+      FunctionName: !GetAtt "LambdaFunction.Arn"
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${MyRestApi}/*"
+
+  GreetingGatewayInvoke:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      Action: "lambda:invokeFunction"
+      FunctionName: !GetAtt "GreetingLambda.Arn"
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${MyRestApi}/*"
+  
+
+  ApiGatewayIamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ''
+            Effect: 'Allow'
+            Principal:
+              Service:
+                - 'apigateway.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      Path: '/'
+      Policies:
+        - PolicyName: LambdaAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action: 'lambda:*'
+                Resource: "*"
+      
+
+Outputs:
+  ApiGatewayInvokeURL:
+    Value: !Sub "https://${MyRestApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}"
+  LambdaFunctionARN:
+    Description: The ARN of the lambda function
+    Value:
+      !GetAtt LambdaFunction.Arn
+  S3BucketSecureURL:
+    Value: !Join ['', ['https://', !GetAtt [myS3Bucket, DomainName ], '/apigw.html']]
+    Description: Name of S3 bucket 
+        

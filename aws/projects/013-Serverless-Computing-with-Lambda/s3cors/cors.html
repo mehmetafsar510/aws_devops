@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <title>Lambda Lab</title>
+  <link rel="stylesheet" href="css/reset.css" />
+  <link rel="stylesheet" href="css/text.css" />
+  <link rel="stylesheet" href="css/960_24_col.css" />
+  <link rel="stylesheet" href="css/meetup_base.css" />
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
+    integrity="sha384-JcKb8q3iqJ61gNV9KGb8thSsNjpSL0n8PARn9HuZOnIxN0hoP+VmmDGMN5t9UJ0Z" crossorigin="anonymous">
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js" type="text/javascript"></script>
+  <script type="text/javascript">
+    $(document).ready(function () {
+      $("button").click(function () {
+        $("#s3_cors").load("https://s3.amazonaws.com/staticwebcors2514/cors_demo_text.txt");
+      });
+    });
+  </script>
+</head>
+
+<body>
+  <div class="container_24 mt-2">
+    <div class="d-flex flex-column border mb-3">
+      <img class="w-25 mx-auto mt-3" src="clarusway_logo.png" alt="clarusway_logo">
+      <h2 class="text-center mt-3 ml-3rounded">
+        Clarusway AWS&DEVOPS PATH Lambda API Gateway Lab
+      </h2>
+      <div class="grid_24 nav">
+        <p>
+        <ul class="bg-light col-12 d-flex justify-content-around list-unstyled">
+          <li><a href="index.html">Home</a></li>
+          <li><a class="bg-secondary text-white rounded" href="cors.html">CORS</a></li>
+          <li><a href="apigw.html">API Gateway</a></li>
+          <li><a href="maptempl.html">Mapping Template</a></li>
+          <!--        <li><a href="kinesis.html">Kinesis</a></li> -->
+          <!--        <li><a href="README.md.html">Labs: README</a></li> -->
+        </ul>
+        </p>
+        <hr />
+      </div>
+
+      <div class="grid_24 s3_cors">
+        <p>
+          Cross Orign Resource Sharing
+        </p>
+
+        <button class="d-inline">Get External Content</button>
+      </div>
+      <div class="grid_24" id="s3_cors">
+      </div>
+
+      <!-- end .grid_24 -->
+      <div class="grid_24">
+        <hr />
+        <p>
+          s3 Sample Static website
+        </p>
+      </div>
+    </div>
+</body>
+
+</html>

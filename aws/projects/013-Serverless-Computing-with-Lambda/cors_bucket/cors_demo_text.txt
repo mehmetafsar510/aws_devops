@@ -1,0 +1,2 @@
+<h2 style="color:red;">CORS is working. Well Done....!</h2>
+<p id="p1">This is some sample text from testing S3 Bucket CORS (Cross Origin Resource Sharing) feature</p>
