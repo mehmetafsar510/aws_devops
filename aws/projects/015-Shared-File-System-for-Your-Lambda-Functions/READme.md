@@ -1,7 +1,7 @@
 # Shared File System for Your Lambda Functions
 
 You will get experience of working with VPC Based Lambda using an EFS File system using AWS Cloudformation Service.
-- [Shared File System for Your Lambda Functions Cloudformation Template](https://github.com/mehmetafsar510/aws_devops/blob/master/aws/projects/008-serverless/serveslessyaml.yml)
+- [Shared File System for Your Lambda Functions Cloudformation Template](https://github.com/mehmetafsar510/aws_devops/blob/master/aws/projects/015-Shared-File-System-for-Your-Lambda-Functions/VPC-EFS-LAMBDA.yaml)
 
 ![Architecture](pic409.png)
   
