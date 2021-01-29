@@ -239,6 +239,13 @@ Resources:
                 pip3 install flask
                 pip3 install flask_mysql
                 echo "${MyDBURI}" > /home/ec2-user/dbserver.endpoint
+                apt install gcc -y
+                wget http://download.redis.io/redis-stable.tar.gz
+                tar xvzf redis-stable.tar.gz
+                cd redis-stable
+                apt-get install make
+                make distclean 
+                make
                 cd /home/ec2-user
                 wget https://raw.githubusercontent.com/mehmetafsar510/aws_devops/master/aws/projects/502-phonebook/app.py
                 mkdir templates
@@ -325,7 +332,7 @@ Resources:
       AllowMajorVersionUpgrade: false
       AutoMinorVersionUpgrade: true
       BackupRetentionPeriod: 0
-      DBInstanceClass: db.t2.micro #required
+      DBInstanceClass: db.t3.micro #required
       DBName: phonebook
       DBSubnetGroupName: !Ref MyDBSubnetGroup
       DeleteAutomatedBackups: true
@@ -338,10 +345,57 @@ Resources:
       MasterUsername: admin
       MaxAllocatedStorage: 30
       PreferredBackupWindow: 03:00-04:00
-      MultiAZ: false
+      MultiAZ: true
       Port: "3306"
       VPCSecurityGroups:
         - !Ref MyDBSecurityGroup
+
+  ReplicaDB:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    Properties:
+      DBInstanceIdentifier: myReplicaRds
+      SourceDBInstanceIdentifier: !Ref MyDatabaseServer
+      DBInstanceClass: db.t3.micro
+      Tags:
+      - Key: Name
+        Value: Read Replica Databas
+        
+  ElasticacheComponentSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Elasticache security group"
+      SecurityGroupIngress:
+        -
+          IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          SourceSecurityGroupId:
+            Ref: WebServersSecGroup
+      VpcId:
+        Ref: VPC
+  SubnetGroup: 
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties: 
+      Description: "Cache Subnet Group"
+      SubnetIds: 
+        - Ref: "PublicSubnetA"
+
+  ElasticacheCluster:
+    Type: AWS::ElastiCache::CacheCluster
+    DeletionPolicy: Delete
+    Properties:
+      CacheSubnetGroupName: !Ref SubnetGroup
+      AutoMinorVersionUpgrade: true
+      Engine: redis
+      EngineVersion: 5.0.4
+      CacheNodeType: cache.t2.micro
+      NumCacheNodes: 1
+      VpcSecurityGroupIds: 
+        - !Ref ElasticacheComponentSecurityGroup
+      Tags:
+        - Key: Name
+          Value: MehmetStackElasticCache
   
   VPC:
     Type: AWS::EC2::VPC
