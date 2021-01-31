@@ -1,0 +1,334 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description:  You will be implementing a simple serverless application which uses Web Identity Federation.
+Resources:
+  patchesprivatebucket:
+    Type: AWS::S3::Bucket
+    Properties:
+        CorsConfiguration:
+          CorsRules:
+            - AllowedHeaders: ['*']
+              AllowedMethods: ['GET', 'HEAD']
+              AllowedOrigins: ['*']
+  appbucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      AccessControl: PublicRead
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      PolicyDocument:
+        Id: MyPolicy
+        Version: 2012-10-17
+        Statement:
+          - Sid: PublicReadForGetBucketObjects
+            Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Join 
+              - ''
+              - - 'arn:aws:s3:::'
+                - !Ref appbucket
+                - /*
+      Bucket: !Ref appbucket
+
+  CopyS3ObjectsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Copies objects into buckets
+      Handler: index.handler
+      Runtime: python3.8
+      Role: !GetAtt S3CopyRole.Arn
+      Timeout: 120
+      Code:
+        ZipFile: |
+          import os 
+          import json
+          import cfnresponse
+          import boto3
+          import logging
+
+          from botocore.exceptions import ClientError
+          client = boto3.client('s3')
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          def handler(event, context):
+            logger.info("Received event: %s" % json.dumps(event))
+            source_bucket = event['ResourceProperties']['SourceBucket']
+            source_prefix = event['ResourceProperties'].get('SourcePrefix') or ''
+            bucket = event['ResourceProperties']['Bucket']
+            prefix = event['ResourceProperties'].get('Prefix') or ''
+
+            result = cfnresponse.SUCCESS
+
+            try:
+              if event['RequestType'] == 'Create' or event['RequestType'] == 'Update':
+                result = copy_objects(source_bucket, source_prefix, bucket, prefix)
+              elif event['RequestType'] == 'Delete':
+                result = delete_objects(bucket, prefix)
+            except ClientError as e:
+              logger.error('Error: %s', e)
+              result = cfnresponse.FAILED
+
+            cfnresponse.send(event, context, result, {})
+
+          def copy_objects(source_bucket, source_prefix, bucket, prefix):
+            paginator = client.get_paginator('list_objects_v2')
+            page_iterator = paginator.paginate(Bucket=source_bucket, Prefix=source_prefix)
+            for key in {x['Key'] for page in page_iterator for x in page['Contents']}:
+              dest_key = os.path.join(prefix, os.path.relpath(key, source_prefix))
+              if not key.endswith('/'):
+                print 'copy {} to {}'.format(key, dest_key)
+                client.copy_object(CopySource={'Bucket': source_bucket, 'Key': key}, Bucket=bucket, Key = dest_key)
+            return cfnresponse.SUCCESS
+
+          def delete_objects(bucket, prefix):
+            paginator = client.get_paginator('list_objects_v2')
+            page_iterator = paginator.paginate(Bucket=bucket, Prefix=prefix)
+            objects = [{'Key': x['Key']} for page in page_iterator for x in page['Contents']]
+            client.delete_objects(Bucket=bucket, Delete={'Objects': objects})
+            return cfnresponse.SUCCESS
+  S3CopyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        -
+          PolicyName: S3Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              -
+                Sid: AllowLogging
+                Effect: Allow
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: "*"
+              
+              -
+                Sid: WriteToStudentBuckets
+                Effect: Allow
+                Action:
+                  - "s3:ListBucket"
+                  - "s3:GetObject"
+                  - "s3:PutObject"
+                  - "s3:PutObjectAcl"
+                  - "s3:PutObjectVersionAcl"
+                  - "s3:DeleteObject"
+                  - "s3:DeleteObjectVersion"
+                  - "s3:CopyObject"
+                Resource:
+                  - !Sub "arn:aws:s3:::${appbucket}"
+                  - !Sub "arn:aws:s3:::${appbucket}/*"
+                  - !Sub "arn:aws:s3:::${patchesprivatebucket}"
+                  - !Sub "arn:aws:s3:::${patchesprivatebucket}/*"
+  privatepatchespolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Permissions to List contents of the privatepatches bucket
+      ManagedPolicyName: "PrivatePatchesPermissions"
+      Path: /
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - 
+            Sid: ReadFromLCBucket
+            Effect: Allow
+            Action:
+              - "s3:ListBucket"
+              - "s3:GetObject"
+            Resource:
+              - !Sub "arn:aws:s3:::${patchesprivatebucket}"
+              - !Sub "arn:aws:s3:::${patchesprivatebucket}/*"
+
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: google-user-pool
+      AliasAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: True
+        InviteMessageTemplate:
+          EmailMessage:
+            !Sub |
+              <p>You are invited to join the google dashboard. Your dashboard credentials are as follows:</p>
+              <p>
+              Username: <strong>{username}</strong><br />
+              Password: <strong>{####}</strong>
+              </p>
+              <p>
+              Please sign in to the dashboard with the user name and your temporary password provided above at: <br />
+              
+              </p>
+          EmailSubject: "Your google Dashboard Login"
+        UnusedAccountValidityDays: 7
+      EmailVerificationMessage:
+        !Sub |
+          <p>You are invited to join the google dashboard. Your dashboard credentials are as follows:</p>
+          <p>
+          Username: <strong>{username}</strong><br />
+          Password: <strong>{####}</strong>
+          </p>
+          <p>
+          Please sign in to the dashboard with the user name and temporary password provided above at: <br />
+        
+          </p>
+      EmailVerificationSubject: "Your Google Dashboard Login"
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: True
+          RequireNumbers: True
+          RequireSymbols: False
+          RequireUppercase: True
+      Schema:
+        - AttributeDataType: String
+          Name: email
+          Required: True
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: real-time-account-activity-report
+      GenerateSecret: False
+      WriteAttributes:
+        - email
+      ReadAttributes:
+        - email
+      RefreshTokenValidity: 1
+      UserPoolId: !Ref CognitoUserPool
+
+  CognitoUserPoolIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties: 
+      ProviderName: Google
+      AttributeMapping:
+        email: drmehmet510@gmail.com
+      ProviderDetails:
+        client_id: 956064605870-q7gtbpeb8l0gnqalbs8f98s80gs9jac4.apps.googleusercontent.com
+        client_secret: WmIRi0BmChQxMWJaLOCqmjyF
+        authorize_scopes: email openid
+      ProviderType: Google
+      UserPoolId: 
+        Ref: CognitoUserPool
+
+  CognitoId:
+    Type: "AWS::Cognito::IdentityPool"
+    Properties:
+     "AllowUnauthenticatedIdentities": false
+     "SupportedLoginProviders": { "accounts.google.com": "956064605870-q7gtbpeb8l0gnqalbs8f98s80gs9jac4.apps.googleusercontent.com" }
+
+  CognitoIdentityPoolRoleAttachment:
+    Type: AWS::Cognito::IdentityPoolRoleAttachment
+    Properties:
+      IdentityPoolId: !Sub '${CognitoId}'
+      Roles:
+        unauthenticated: !GetAtt UnauthenticatedUserRole.Arn
+        authenticated: !GetAtt AuthenticatedUserRole.Arn
+  AuthenticatedUserRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated:
+               - cognito-identity.amazonaws.com
+            Action:
+              - sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                cognito-identity.amazonaws.com:aud: !Sub '${CognitoId}'
+              ForAnyValue:StringLike:
+                cognito-identity.amazonaws.com:amr: authenticated
+      Path: /
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "cognito-sync:*"
+                  - "cognito-identity:*"
+                  - "mobileanalytics:*"
+                Resource: "*"
+              - 
+                Sid: ReadFromLCBucket
+                Effect: Allow
+                Action:
+                  - "s3:ListBucket"
+                  - "s3:GetObject"
+                Resource:
+                  - !Sub "arn:aws:s3:::${patchesprivatebucket}"
+                  - !Sub "arn:aws:s3:::${patchesprivatebucket}/*"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: F3
+            reason: "This is a access Policy."
+
+  UnauthenticatedUserRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated:
+                - cognito-identity.amazonaws.com
+            Action:
+              - sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                "cognito-identity.amazonaws.com:aud": !Ref CognitoId
+              ForAnyValue:StringLike:
+                "cognito-identity.amazonaws.com:amr": unauthenticated
+      Path: /
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "mobileanalytics:PutEvents"
+                  - "cognito-sync:*"
+                Resource: "*"
+Outputs:
+  WebsiteURL:
+    Value: !GetAtt 
+      - appbucket
+      - WebsiteURL
+    Description: URL for website hosted on S3
+  S3BucketSecureURL:
+    Value: !Join 
+      - ''
+      - - 'https://'
+        - !GetAtt 
+          - appbucket
+          - DomainName
+    Description: app bucket URL

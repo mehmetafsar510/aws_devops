@@ -1,0 +1,20 @@
+<html lang="en">
+  <title>PetIDF Demo</title>
+  <head>
+    <meta name="author" content="acantril">
+    <meta name="google-signin-scope" content="profile email">
+    <!-- Google Client ID -->
+    <meta name="google-signin-client_id" content="956064605870-q7gtbpeb8l0gnqalbs8f98s80gs9jac4.apps.googleusercontent.com">
+    <script src="https://apis.google.com/js/platform.js" async defer></script>
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.2.19.min.js"></script>
+    <script src="scripts.js"></script>
+  </head>
+  <body>
+    <div class="g-signin2" data-onsuccess="onSignIn" data-theme="dark"></div>
+    <p />
+    <button onclick="onSignOut()">Sign out</button>
+    <p />
+    <div id="viewer"></div>
+    <div id="output"></div>
+  </body>
+</html>
