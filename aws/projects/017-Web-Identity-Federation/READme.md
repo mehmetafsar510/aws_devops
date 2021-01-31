@@ -11,7 +11,7 @@ The application runs from a browser, gets the user to login using a Google ID an
 
 
 
-- [WEBIDF](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/quickcreate?templateURL=https://learn-cantrill-labs.s3.amazonaws.com/aws-cognito-web-identity-federation/WEBIDF.yaml&stackName=WEBIDF)
+- [WEBIDF](https://github.com/mehmetafsar510/aws_devops/blob/master/aws/projects/017-Web-Identity-Federation/WebIdentityFederation.yaml)
 
 
 
@@ -20,7 +20,7 @@ The application runs from a browser, gets the user to login using a Google ID an
 #  Login to an AWS Account    
 
 Login to an AWS account using a user with admin privileges and ensure your region is set to `us-east-1` `N. Virginia`  
-Upload this template [WEBIDF](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/quickcreate?templateURL=https://learn-cantrill-labs.s3.amazonaws.com/aws-cognito-web-identity-federation/WEBIDF.yaml&stackName=WEBIDF) to AWS cloudformation service. 
+Upload this template [WEBIDF](https://github.com/mehmetafsar510/aws_devops/blob/master/aws/projects/017-Web-Identity-Federation/WebIdentityFederation.yaml) to AWS cloudformation service. 
 Check the  `The following resource(s) require capabilities: [AWS::IAM::ManagedPolicy, AWS::IAM::Role]` box  
 Click `Create Stack`  
 
