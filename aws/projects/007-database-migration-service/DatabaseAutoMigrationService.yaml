@@ -845,7 +845,7 @@ Resources:
       DBSecurityGroups:
         - !Ref MyDBSecurityGroup
       Engine: MariaDB
-      EngineVersion: 10.4
+      EngineVersion: "10.4"
       MasterUserPassword: !Ref DBPassword
       MasterUsername: !Ref DBUser
       MaxAllocatedStorage: 30
