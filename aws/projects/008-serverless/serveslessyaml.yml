@@ -132,7 +132,7 @@ Resources:
       LoggingConfiguration:
         Destinations:
           - CloudWatchLogsLogGroup: 
-              LogGroupArn: arn:aws:logs:us-east-1:646075469151:log-group:ErrorLog:*
+              LogGroupArn: arn:aws:logs:us-east-1:646075469158:log-group:ErrorLog:*
         IncludeExecutionData: True
         Level: ALL
       RoleArn: !GetAtt StateMachineRole.Arn #required
