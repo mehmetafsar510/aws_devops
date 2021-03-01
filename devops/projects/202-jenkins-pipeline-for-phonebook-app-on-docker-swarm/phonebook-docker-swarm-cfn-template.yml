@@ -104,7 +104,9 @@ Resources:
               -o /usr/local/bin/docker-compose
               chmod +x /usr/local/bin/docker-compose
               yum install python3 -y
-              pip3 install ec2instanceconnectcli
+              amazon-linux-extras install epel -y
+              yum install python-pip -y
+              pip install ec2instanceconnectcli
               eval "$(mssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  \
                 --region ${AWS::Region} ${DockerManager1} docker swarm join-token manager | grep -i 'docker')"
               # uninstall aws cli version 1
@@ -140,7 +142,9 @@ Resources:
               -o /usr/local/bin/docker-compose
               chmod +x /usr/local/bin/docker-compose
               yum install python3 -y
-              pip3 install ec2instanceconnectcli
+              amazon-linux-extras install epel -y
+              yum install python-pip -y
+              pip install ec2instanceconnectcli
               eval "$(mssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  \
                 --region ${AWS::Region} ${DockerManager1} docker swarm join-token worker | grep -i 'docker')"
               # uninstall aws cli version 1
