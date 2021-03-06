@@ -1,0 +1,226 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: You will install the agent on Linux-based server environments such as web servers, 
+  log servers, and database servers. After installing the agent, configure it by specifying the files to monitor 
+  and the delivery stream for the data. After the agent is configured, it durably collects data from the files and 
+  reliably sends it to the delivery stream.
+Parameters:
+ 
+  S3Expiredate:
+    Description: Number of days to keep S3 file
+    Type: String
+    Default: 10
+
+  KeyPairName:
+    Description: Enter the name of your Key Pair for SSH connections.
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: Must one of the existing EC2 KeyPair
+
+Resources:
+  MyInstancePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: ec2_kinesis_policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - kinesis:PutRecord
+              - kinesis:PutRecords
+            Resource: !GetAtt 'MyKinesisStream.Arn'
+          
+      Roles:
+        - !Ref 'MyEC2InstanceRole'  
+  
+  MyEC2InstanceRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonKinesisFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+
+  MyEC2ConnectProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Roles: #required
+        - !Ref MyEC2InstanceRole
+
+  MySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH and HTTP
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+  MyEc2Instance:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      ImageId: ami-0947d2ba12ee1ff75
+      InstanceType: t2.micro
+      KeyName: !Ref KeyPairName
+      IamInstanceProfile: !Ref MyEC2ConnectProfile
+      SecurityGroupIds:
+        - !GetAtt MySecurityGroup.GroupId
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #! /bin/bash
+            yum update -y
+            yum install aws-kinesis-agent -y
+            cd /var/log
+            mkdir weather
+            groupadd weather
+            usermod -a -G weather ec2-user
+            chown -R root:weather /var/log/weather
+            chmod 2775 /var/log/weather
+            find /var/log/weather -type d -exec sudo chmod 2775 {} +
+            cd /var/log/weather
+            aws s3 cp s3://kinesislogss/agent_template.txt .
+            cd /etc/aws-kinesis
+            rm -f agent.json
+            mv /var/log/weather/agent_template.txt /etc/aws-kinesis/agent.json
+            service aws-kinesis-agent start
+            sleep 30
+            cd /var/log/weather
+            wget https://raw.githubusercontent.com/mehmetafsar510/aws_devops/master/teamwork-agendas/city_temp_streaming_sample.log
+            cd /var/log/aws-kinesis-agent
+            tail -10 aws-kinesis-agent.log
+
+  
+
+  MyKinesisStream:
+    Type: AWS::Kinesis::Stream
+    Properties: 
+      ShardCount: 1
+      Name: mykinesisstream
+
+  MydeliveryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: firehose.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref 'AWS::AccountId'
+
+  MydeliveryPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: firehose_delivery_policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:AbortMultipartUpload
+              - s3:GetBucketLocation
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:ListBucketMultipartUploads
+              - s3:PutObject
+            Resource:
+              - !Sub 'arn:aws:s3:::${MyS3bucket}'
+              - !Sub 'arn:aws:s3:::${MyS3bucket}*'
+      Roles:
+        - !Ref 'MydeliveryRole'
+
+  MyreadstreamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: firehose.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref 'AWS::AccountId'
+
+  MyreadstreamPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: firehose_delivery_policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - kinesis:DescribeStream
+            Resource:
+              - '*'
+          - Effect: Allow
+            Action:
+              - kinesis:GetRecords
+              - kinesis:GetShardIterator
+            Resource:
+              - !GetAtt 'MyKinesisStream.Arn'
+      Roles:
+        - !Ref 'MyreadstreamRole'
+
+  Mydeliverystream:
+    Type: AWS::KinesisFirehose::DeliveryStream
+    Properties:
+      ExtendedS3DestinationConfiguration:
+        BucketARN: !Sub 'arn:aws:s3:::${MyS3bucket}'
+        BufferingHints:
+          IntervalInSeconds: 60
+          SizeInMBs: 50
+        CompressionFormat: UNCOMPRESSED
+        Prefix: firehose/cw_logs_stream_firehose/
+        RoleARN: !GetAtt 'MydeliveryRole.Arn'
+        ProcessingConfiguration:
+          Enabled: false
+      DeliveryStreamType: KinesisStreamAsSource
+      KinesisStreamSourceConfiguration:
+        KinesisStreamARN: !GetAtt 'MyKinesisStream.Arn'
+        RoleARN: !GetAtt 'MyreadstreamRole.Arn'
+
+  MyLogGroupFirehose:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/firehose/${Mydeliverystream}'
+      RetentionInDays: 7
+
+  MyS3bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      BucketName: kinesislogss
+      LifecycleConfiguration:
+        Rules:
+          - Id: AutoDelete
+            Status: Enabled
+            ExpirationInDays: !Ref 'S3Expiredate'
+
+Outputs:
+  WebsiteURL:
+    Value: !GetAtt
+      - MyS3bucket
+      - WebsiteURL
+    Description: URL for my S3 Bucket
+
+
