@@ -1,0 +1,248 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: |
+  AWS CloudFormation Sample Template for my static-web site.
+
+Parameters:
+  MyVPCId:
+    Description: My Default VPC ID
+    Type: AWS::EC2::VPC::Id
+    
+  MySubnets:
+    Description: My Default Subnets
+    Type: List<AWS::EC2::Subnet::Id>
+    
+  KeyName:
+    Description: The EC2 Key Pair to allow SSH access to the instance
+    Type: 'AWS::EC2::KeyPair::KeyName'
+ 
+  MyDomainName:
+    Type: AWS::Route53::HostedZone::Id
+    Description: The DNS name of an existing Amazon Route 53 hosted zone e.g. clarusway.us
+
+  MyWebDomainName:
+    Type: String
+    Description: The full domain name e.g. phonebook.clarusway.us
+    AllowedPattern: (?!-)[a-zA-Z0-9-.]{1,63}(?<!-)
+    ConstraintDescription: must be a valid DNS zone name.
+
+  InstanceType:
+    Description: WebServer EC2 instance type
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t1.micro
+      - t2.micro
+      - m1.small
+      - m1.medium
+      - m1.large
+      - m1.xlarge
+      - m2.xlarge
+      - m2.2xlarge
+      - m2.4xlarge
+      - m3.xlarge
+      - m3.2xlarge
+      - c1.medium
+      - c1.xlarge
+    ConstraintDescription: must be a valid EC2 instance type.
+
+Mappings:
+  AWSRegionArch2AMI:
+    us-east-1:
+      '64': ami-0947d2ba12ee1ff75
+    us-east-2:
+      '64': ami-03657b56516ab7912
+    us-west-1:
+      '64': ami-0e4035ae3f70c400f 
+    us-west-2:
+      '64': ami-01fee56b22f308154
+    eu-central-1:
+      '64': ami-00a205cb8e06c3c4e
+    eu-central-2:
+      '64': ami-0bb3fad3c0286ebd5 
+
+Resources:
+  MyWebCertificate:
+    Type: "AWS::CertificateManager::Certificate"
+    Properties:
+      CertificateTransparencyLoggingPreference: DISABLED
+      DomainName: !Ref MyWebDomainName #required
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref MyWebDomainName
+          HostedZoneId: !Ref MyDomainName
+  MyWebCloudfront:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: Cloudfront Distribution pointing to ALBDNS
+        Origins:
+        - DomainName: !GetAtt ALB.DNSName
+          Id: ALBOriginId
+          CustomOriginConfig:
+            OriginKeepaliveTimeout: 5
+            OriginSSLProtocols: 
+            - TLSv1
+            HTTPPort: 80
+            HTTPSPort: 443
+            OriginProtocolPolicy: http-only
+        Enabled: true
+        Aliases:
+        - !Ref MyWebDomainName 
+        DefaultCacheBehavior:
+          TargetOriginId: ALBOriginId
+          CachedMethods: 
+            - GET
+            - HEAD
+          SmoothStreaming: false
+          ForwardedValues:
+            QueryString: true
+            Cookies:
+              Forward: none
+          AllowedMethods:
+          - GET
+          - HEAD
+          - OPTIONS
+          - PUT
+          - POST
+          - PATCH
+          - DELETE
+          Compress: true
+          ViewerProtocolPolicy: redirect-to-https
+        PriceClass: PriceClass_All
+        ViewerCertificate:
+          AcmCertificateArn: !Ref MyWebCertificate
+          SslSupportMethod: sni-only
+  MyWebDNSName:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: !Ref MyDomainName
+      RecordSets:
+      - Name: !Ref MyWebDomainName
+        Type: A
+        AliasTarget:
+          HostedZoneId: Z2FDTNDATAQYW2
+          DNSName: !GetAtt MyWebCloudfront.DomainName
+
+  ALBSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: Enable HTTP for ALB #required
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref MyVPCId
+
+  WebServersSecGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: Enable HTTP for Web Servers #required
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !GetAtt ALBSecurityGroup.GroupId
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref MyVPCId
+
+  WebServerTG:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+    Properties:
+      Port: 80
+      Protocol: HTTP
+      TargetType: instance
+      VpcId: !Ref MyVPCId
+  
+  ALB:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+      SecurityGroups:
+        - !GetAtt ALBSecurityGroup.GroupId
+      Subnets:
+        !Ref MySubnets
+
+  ALBListener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties:
+      DefaultActions: #required
+        - TargetGroupArn: !Ref WebServerTG
+          Type: forward
+      LoadBalancerArn: !Ref ALB #required
+      Port: 80 #required
+      Protocol: HTTP #required
+
+  WebServerLT:
+    Type: "AWS::EC2::LaunchTemplate"
+    Properties:
+      LaunchTemplateData:
+        ImageId: !FindInMap 
+          - AWSRegionArch2AMI
+          - !Ref 'AWS::Region'
+          - '64'
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref KeyName
+        SecurityGroupIds:
+          - !GetAtt WebServersSecGroup.GroupId
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+             - Key: Name
+               Value: !Sub Web Server of ${AWS::StackName}
+        UserData:
+          Fn::Base64: 
+            !Sub |
+              #! /bin/bash
+              amazon-linux-extras install docker -y
+              systemctl start docker
+              systemctl enable docker
+              cd /home/ec2-user
+              wget https://github.com/mehmetafsar510/aws_devops/raw/master/teamwork-agendas/Mehmet.zip
+              unzip Mehmet.zip
+              cd /home/ec2-user/Mehmet
+              docker build -t mehmet .
+              docker run -d --name=mehmetweb -p 80:80 mehmet:latest
+
+  WebServerASG:
+    Type: "AWS::AutoScaling::AutoScalingGroup"
+    Properties:
+      AvailabilityZones: !GetAZs
+      Cooldown: "200"
+      DesiredCapacity: "2"
+      HealthCheckGracePeriod: 90
+      HealthCheckType: ELB
+      LaunchTemplate:
+        LaunchTemplateId: !Ref WebServerLT
+        Version: !GetAtt WebServerLT.LatestVersionNumber
+      MaxSize: "3" #required
+      MinSize: "1" #required
+      TargetGroupARNs:
+        - !Ref WebServerTG
+
+Outputs:
+  DistributionName:
+    Description: URL to access the CloudFront distribution
+    Value: !Join 
+      - ''
+      - - 'http://'
+        - !GetAtt 
+          - MyWebCloudfront
+          - DomainName
+  ALBDnsName:
+    Description: URL to access the Application Load Balance
+    Value: !Join 
+      - ''
+      - - 'http://'
+        - !GetAtt 
+          - ALB
+          - DNSName
+
+  WebsiteURL:
+    Description: Website URL
+    Value: !Join 
+      - ''
+      - - 'https://'
+        - !Ref MyWebDomainName
