@@ -1,0 +1,733 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description:   AWS Systems Manager, this template MUST be used in us-east-1
+Parameters:
+  Environment:
+    Description: |
+      AWS Systems Manager Actions capability will patch managed instances
+      with a tag name of "Patch Group" and will use the value you provide here.
+      AWS Systems Manager Insights capability will be performed on managed instances
+      with the tag name of "Environment" and will use the value you provide here.
+    Type: String
+    Default: Sample Fleet
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z0-9+-=._:/@ ]*$
+    ConstraintDescription: |
+      Malformed Input Parameter: Environment must contain only upper and lower
+      case letters, numbers, and the characters '+,-,=,.,_,:,/,@'. Minimum length
+      is 1 and maximum length is 255.
+  CreateFleet:
+    Description: |
+      Creates a network and fleet of four instances that you can use for this
+      reference implementation. NOTE: The instances and some network resources
+      will incur a charge for their use.
+    Type: String
+    AllowedValues:
+      - "Yes"
+      - "No"
+    Default: "Yes"
+  KeyPairName:
+    Description: KeyPair for Instances
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: "A4L"
+  WindowsAMI:
+    Description: AMI for Windows Server
+    Type: String
+    Default: "ami-02642c139a9dfb378"
+  UbuntuAMI:
+    Description: AMI For Ubuntu
+    Type: String
+    Default: "ami-03a2cbdcd9e7d1955"
+  CentosAMI:
+    Description: AMI For Centos
+    Type: String
+    Default: "ami-01ca03df4a6012157"
+  AmazonLinux2AMI:
+    Description: AMI for Bastion Host (default is latest AmaLinux2)
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+Resources:
+  OnpremVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 192.168.10.0/24
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: onprem-vpc
+  OnpremIGW:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+      - Key: Name
+        Value: IGW-ONPREM
+  OnpremIGWAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref OnpremVPC
+      InternetGatewayId: !Ref OnpremIGW
+  OnpremSNPrivate:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref OnpremVPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 192.168.10.0/25
+      Tags:
+        - Key: Name
+          Value: sn-onprem-private
+  OnpremSNPublic:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref OnpremVPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 192.168.10.128/25
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: sn-onprem-public
+  OnpremRTPublic: 
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref OnpremVPC
+      Tags:
+      - Key: Name
+        Value: ONPREM-RT-PUBLIC
+  OnpremRTPublicAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref OnpremSNPublic
+      RouteTableId:
+        Ref: OnpremRTPublic
+  OnpremRTPrivate: 
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref OnpremVPC
+      Tags:
+      - Key: Name
+        Value: ONPREM-RT-PRIVATE
+  OnpremRTPrivateAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref OnpremSNPrivate
+      RouteTableId:
+        Ref: OnpremRTPrivate
+  OnpremRouteDefaultPublic: 
+    Type: 'AWS::EC2::Route'
+    DependsOn: OnpremIGWAttachment
+    Properties:
+      RouteTableId:
+        Ref: OnpremRTPublic
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId:
+        Ref: OnpremIGW
+  OnpremEIP:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: vpc
+  OnpremNATGW:
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      AllocationId: !GetAtt OnpremEIP.AllocationId
+      SubnetId: !Ref OnpremSNPublic
+  OnpremRouteDefaultPrivate: 
+    Type: 'AWS::EC2::Route'
+    DependsOn: OnpremIGWAttachment
+    Properties:
+      RouteTableId:
+        Ref: OnpremRTPrivate
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId:
+        Ref: OnpremNATGW
+  OnpremInstanceSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: !Ref OnpremVPC
+      GroupDescription: Default A4L AWS SG
+      SecurityGroupIngress: 
+        - Description: 'Allow SSH IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: '0.0.0.0/0'
+        - Description: 'Allow RDP IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: '0.0.0.0/0'
+        - Description: 'Allow ALL from ONPREM Networks'
+          IpProtocol: "-1"
+          CidrIp: '192.168.8.0/21'
+  ONPREMInstanceSGSelfRef:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    Properties:
+      GroupId: !Ref OnpremInstanceSG
+      IpProtocol: '-1'
+      SourceSecurityGroupId: !Ref OnpremInstanceSG
+  AWSVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.16.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: aws-vpc
+  AWSIGW:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+      - Key: Name
+        Value: IGW-AWS
+  AWSIGWAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref AWSVPC
+      InternetGatewayId: !Ref AWSIGW
+  AWSSNPrivate:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref AWSVPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 10.16.0.0/24
+      Tags:
+        - Key: Name
+          Value: sn-aws-private
+  AWSSNPublic:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref AWSVPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 10.16.1.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: sn-aws-public
+  AWSRTPublic: 
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref AWSVPC
+      Tags:
+      - Key: Name
+        Value: AWS-RT-PUBLIC
+  AWSRTPublicAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref AWSSNPublic
+      RouteTableId:
+        Ref: AWSRTPublic
+  AWSRTPrivate: 
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref AWSVPC
+      Tags:
+      - Key: Name
+        Value: AWS-RT-PRIVATE
+  AWSRTPrivateAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref AWSSNPrivate
+      RouteTableId:
+        Ref: AWSRTPrivate
+  AWSRouteDefaultPublic: 
+    Type: 'AWS::EC2::Route'
+    DependsOn: AWSIGWAttachment
+    Properties:
+      RouteTableId:
+        Ref: AWSRTPublic
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId:
+        Ref: AWSIGW
+  AWSEIP:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: vpc
+  AWSNATGW:
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      AllocationId: !GetAtt AWSEIP.AllocationId
+      SubnetId: !Ref AWSSNPublic
+  AWSRouteDefaultPrivate: 
+    Type: 'AWS::EC2::Route'
+    DependsOn: AWSIGWAttachment
+    Properties:
+      RouteTableId:
+        Ref: AWSRTPrivate
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId:
+        Ref: AWSNATGW
+  AWSInstanceSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: !Ref AWSVPC
+      GroupDescription: Default A4L AWS SG
+      SecurityGroupIngress: 
+        - Description: 'Allow SSH IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: '0.0.0.0/0'
+        - Description: 'Allow RDP IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: '0.0.0.0/0'
+        - Description: 'Allow ALL from ONPREM Networks'
+          IpProtocol: "-1"
+          CidrIp: '192.168.8.0/21'
+  AWSInstanceSGSelfRef:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    Properties:
+      GroupId: !Ref AWSInstanceSG
+      IpProtocol: '-1'
+      SourceSecurityGroupId: !Ref AWSInstanceSG
+  onpremVPCESSM:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: "Interface"
+      PrivateDnsEnabled: True
+      SubnetIds:
+        - !Ref OnpremSNPrivate
+      SecurityGroupIds:
+        - !Ref OnpremInstanceSG
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
+      VpcId: !Ref OnpremVPC
+  onpremVPCEEC2Messages:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: "Interface"
+      PrivateDnsEnabled: True
+      SubnetIds:
+        - !Ref OnpremSNPrivate
+      SecurityGroupIds:
+        - !Ref OnpremInstanceSG
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2messages
+      VpcId: !Ref OnpremVPC
+  onpremVPCESSMMessages:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: "Interface"
+      PrivateDnsEnabled: True
+      SubnetIds:
+        - !Ref OnpremSNPrivate
+      SecurityGroupIds:
+        - !Ref OnpremInstanceSG
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssmmessages
+      VpcId: !Ref OnpremVPC
+  onpremVPCESEC2:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: "Interface"
+      PrivateDnsEnabled: True
+      SubnetIds:
+        - !Ref OnpremSNPrivate
+      SecurityGroupIds:
+        - !Ref OnpremInstanceSG
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2
+      VpcId: !Ref OnpremVPC
+
+  MaintenanceWindowServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ssm.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonSSMMaintenanceWindowRole
+      Policies:
+        - PolicyName: PassRole
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource:
+                  - "*"
+  MaintenanceWindow:
+    Type: AWS::SSM::MaintenanceWindow
+    Properties:
+      Description: Server Fleet Management Solution Weekly Maintenance Window
+      AllowUnassociatedTargets: false
+      Cutoff: 1
+      Schedule: rate(7 days)
+      Duration: 2
+      Name: server-fleet-management-solution-weekly-patching
+
+  MaintenanceWindowTarget:
+    Type: AWS::SSM::MaintenanceWindowTarget
+    Properties:
+      Description: Server Fleet Management Solution Instances
+      WindowId: !Ref MaintenanceWindow
+      ResourceType: INSTANCE
+      Targets:
+        - Key: tag:Patch Group
+          Values:
+          - !Ref Environment
+
+  MaintenanceWindowTask:
+    Type: AWS::SSM::MaintenanceWindowTask
+    Properties:
+      Description: Runs Server Fleet Management Solution patch baseline
+      ServiceRoleArn: !GetAtt MaintenanceWindowServiceRole.Arn
+      MaxErrors: "1"
+      TaskArn: AWS-RunPatchBaseline
+      MaxConcurrency: 100%
+      WindowId: !Ref MaintenanceWindow
+      Priority: 1
+      TaskType: RUN_COMMAND
+      TaskInvocationParameters:
+        MaintenanceWindowRunCommandParameters:
+          Comment: Runs patch baseline
+          TimeoutSeconds: 600
+          Parameters: {"Operation":["Install"]}
+          OutputS3BucketName: !Ref ArtifactBucket
+      Targets:
+      - Values:
+        - !Ref MaintenanceWindowTarget
+        Key: WindowTargetIds
+
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+      LoggingConfiguration:
+        DestinationBucketName: !Ref ArtifactLoggingBucket
+        LogFilePrefix: logs
+  ArtifactLoggingBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      AccessControl: LogDeliveryWrite
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  ArtifactBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    DeletionPolicy: Delete
+    Properties:
+      Bucket: !Ref ArtifactBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ArtifactBucketPermissionsCheck
+            Effect: Allow
+            Resource: !Sub ${ArtifactBucket.Arn}
+            Principal:
+              Service: ssm.amazonaws.com
+            Action:
+              - s3:GetBucketAcl
+          - Sid: ArtifactBucketDelivery
+            Effect: Allow
+            Resource: !Sub ${ArtifactBucket.Arn}/*
+            Principal:
+              Service: ssm.amazonaws.com
+            Action:
+              - s3:PutObject
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+
+  InventoryAssociation:
+    Type: AWS::SSM::Association
+    Properties:
+      Name: AWS-GatherSoftwareInventory
+      AssociationName: GatherSoftwareInventory
+      Targets:
+        - Key: tag:Environment
+          Values:
+          - !Ref Environment
+      ScheduleExpression: rate(1 day)
+      Parameters:
+        # The files that are collected are OS-specific.
+        files:
+        - '[
+            {
+              "Path": "/usr/bin",
+              "Pattern": [
+                "aws*",
+                "*ssm*"
+              ],
+              "Recursive": false
+            },
+            {
+              "Path": "/var/log",
+              "Pattern": [
+                "amazon*.*"
+              ],
+              "Recursive": true,
+              "DirScanLimit": 1000
+            }
+          ]'
+        windowsUpdates:
+        - Enabled
+        awsComponents:
+        - Enabled
+        customInventory:
+        - Enabled
+        networkConfig:
+        - Enabled
+        windowsRegistry:
+        - '[{"Path":"HKEY_LOCAL_MACHINE\SOFTWARE\Amazon","Recursive":true}]'
+        applications:
+        - Enabled
+        instanceDetailedInformation:
+        - Enabled
+        services:
+        - Enabled
+        windowsRoles:
+        - Enabled
+
+
+  SSMRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+  SSMInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: /
+      Roles:
+        - !Ref SSMRole
+
+  A4LWIN:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref 'WindowsAMI'
+      IamInstanceProfile: !Ref SSMInstanceProfile
+      InstanceType: 't2.micro'
+      SubnetId: !Ref 'OnpremSNPrivate'
+      Tags:
+        - Key: Name
+          Value: 'A4L-WIN'
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Patch Group
+          Value: !Ref Environment
+      SecurityGroupIds:
+        - !Ref OnpremInstanceSG
+      KeyName: !Ref 'KeyPairName'
+      UserData:
+        Fn::Base64: !Sub |
+          <script>
+          ActivationId=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/ActivationId --with-decryption --query Parameters[0].Value)
+          ActivationId=`echo $ActivationId | sed -e 's/^"//' -e 's/"$//'`
+          ActivationCode=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/ActivationId --with-decryption --query Parameters[0].Value)
+          ActivationCode=`echo $ActivationCode | sed -e 's/^"//' -e 's/"$//'`
+          $code = "$ActivationCode"
+          $id = "$ActivationId"
+          $region = "us-east-1"
+          $dir = $env:TEMP + "\ssm"
+          New-Item -ItemType directory -Path $dir -Force
+          cd $dir
+          (New-Object System.Net.WebClient).DownloadFile("https://amazon-ssm-$region.s3.amazonaws.com/latest/windows_amd64/AmazonSSMAgentSetup.exe", $dir + "\AmazonSSMAgentSetup.exe")
+          Start-Process .\AmazonSSMAgentSetup.exe -ArgumentList @("/q", "/log", "install.log", "CODE=$code", "ID=$id", "REGION=$region") -Wait
+          Get-Content ($env:ProgramData + "\Amazon\SSM\InstanceData\registration")
+          Get-Service -Name "AmazonSSMAgent"
+          </script>
+          
+  A4LCENTOS:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref 'CentosAMI' 
+      IamInstanceProfile: !Ref SSMInstanceProfile
+      InstanceType: 't2.micro'
+      SubnetId: !Ref 'OnpremSNPrivate'
+      Tags:
+        - Key: Name
+          Value: 'A4L-CENTOS'
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Patch Group
+          Value: !Ref Environment
+      SecurityGroupIds:
+        - !Ref OnpremInstanceSG
+      KeyName: !Ref 'KeyPairName'
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          yum install python3 -y
+          ActivationId=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/ActivationId --with-decryption --query Parameters[0].Value)
+          ActivationId=`echo $ActivationId | sed -e 's/^"//' -e 's/"$//'`
+          ActivationCode=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/ActivationId --with-decryption --query Parameters[0].Value)
+          ActivationCode=`echo $ActivationCode | sed -e 's/^"//' -e 's/"$//'`
+          mkdir /tmp/ssm
+          curl https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm -o /tmp/ssm/amazon-ssm-agent.rpm
+          yum install -y /tmp/ssm/amazon-ssm-agent.rpm
+          systemctl stop amazon-ssm-agent
+          amazon-ssm-agent -register -code "$ActivationCode" -id "$ActivationId" -region "us-east-1"
+          systemctl start amazon-ssm-agent
+
+  A4LUBUNTU:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref 'UbuntuAMI'
+      IamInstanceProfile: !Ref SSMInstanceProfile
+      InstanceType: 't2.micro'
+      SubnetId: !Ref 'OnpremSNPrivate'
+      Tags:
+        - Key: Name
+          Value: 'A4L-Ubuntu'
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Patch Group
+          Value: !Ref Environment
+      SecurityGroupIds:
+        - !Ref OnpremInstanceSG
+      KeyName: !Ref 'KeyPairName'
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          snap remove amazon-ssm-agent
+          ActivationId=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/ActivationId --with-decryption --query Parameters[0].Value)
+          ActivationId=`echo $ActivationId | sed -e 's/^"//' -e 's/"$//'`
+          ActivationCode=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/ActivationId --with-decryption --query Parameters[0].Value)
+          ActivationCode=`echo $ActivationCode | sed -e 's/^"//' -e 's/"$//'`
+          mkdir /tmp/ssm
+          curl https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/debian_amd64/amazon-ssm-agent.deb -o /tmp/ssm/amazon-ssm-agent.deb
+          dpkg -i /tmp/ssm/amazon-ssm-agent.deb
+          service amazon-ssm-agent stop
+          amazon-ssm-agent -register -code "$ActivationCode" -id "$ActivationId" -region "us-east-1" 
+          service amazon-ssm-agent start
+  AWSWIN:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - AWSNATGW
+    Properties:
+      ImageId: !Ref 'WindowsAMI'
+      IamInstanceProfile: !Ref SSMInstanceProfile
+      InstanceType: 't2.micro'
+      SubnetId: !Ref 'AWSSNPrivate'
+      Tags:
+        - Key: Name
+          Value: 'AWS-WIN'
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Patch Group
+          Value: !Ref Environment
+      SecurityGroupIds:
+        - !Ref AWSInstanceSG
+      KeyName: !Ref 'KeyPairName'
+  AWSCENTOS:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - AWSNATGW
+    Properties:
+      ImageId: !Ref 'CentosAMI'
+      IamInstanceProfile: !Ref SSMInstanceProfile
+      InstanceType: 't2.micro'
+      SubnetId: !Ref 'AWSSNPrivate'
+      Tags:
+        - Key: Name
+          Value: 'AWS-CENTOS'
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Patch Group
+          Value: !Ref Environment
+      SecurityGroupIds:
+        - !Ref AWSInstanceSG
+      KeyName: !Ref 'KeyPairName'
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          yum install python3 -y
+          dnf install -y https://s3.us-east-1.amazonaws.com/amazon-ssm-us-east-1/latest/linux_amd64/amazon-ssm-agent.rpm
+          systemctl enable amazon-ssm-agent
+          systemctl start amazon-ssm-agent
+  AWSUBUNTU:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - AWSNATGW
+    Properties:
+      ImageId: !Ref 'UbuntuAMI'
+      IamInstanceProfile: !Ref SSMInstanceProfile
+      InstanceType: 't2.micro'
+      SubnetId: !Ref 'AWSSNPrivate'
+      Tags:
+        - Key: Name
+          Value: 'AWS-Ubuntu'
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Patch Group
+          Value: !Ref Environment
+      SecurityGroupIds:
+        - !Ref AWSInstanceSG
+      KeyName: !Ref 'KeyPairName'
+  AWSJUMPBOX:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref 'AmazonLinux2AMI'
+      InstanceType: 't2.micro'
+      SubnetId: !Ref 'AWSSNPublic'
+      Tags:
+        - Key: Name
+          Value: 'AWS-JUMPBOX'
+      SecurityGroupIds:
+        - !Ref AWSInstanceSG
+      KeyName: !Ref 'KeyPairName'
+  ONPREMJUMPBOX:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref 'AmazonLinux2AMI'
+      InstanceType: 't2.micro'
+      SubnetId: !Ref 'OnpremSNPublic'
+      Tags:
+        - Key: Name
+          Value: 'A4L-JUMPBOX'
+      SecurityGroupIds:
+        - !Ref OnpremInstanceSG
+      KeyName: !Ref 'KeyPairName'
+
+  
+Outputs:
+  AWSVPC:
+    Description: VPC ID of the AWS VPC
+    Value: !Ref AWSVPC
+    Export:
+      Name: AWSVPC
+  AWSSNPRIVATE:
+    Description: AWS Private Subnet ID
+    Value: !Ref AWSSNPrivate
+    Export:
+      Name: AWSSNPRIVATE
+  AWSINSTANCESG:
+    Description: AWS Instance Security Group ID
+    Value: !Ref AWSInstanceSG
+    Export:
+      Name: AWSINSTANCESG
+  AWSRTPRIVATE:
+    Description: AWS PRIVATE RT ID
+    Value: !Ref AWSRTPrivate
+    Export:
+      Name: AWSRTPRIVATE
