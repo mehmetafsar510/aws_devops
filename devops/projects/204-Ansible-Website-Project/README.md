@@ -10,7 +10,7 @@ At the end of this project, you will be able to;
 - Explain how to provision a web server using Ansible
 - Explain how to provision a database server using Ansible
 
-- [Ansible Playbook](https://github.com/mehmetafsar510/aws_devops/blob/master/aws/projects/008-serverless/serveslessyaml.yml)
+- [Ansible Playbook](https://github.com/mehmetafsar510/aws_devops/blob/master/devops/projects/204-Ansible-Website-Project/playbook.yml)
 
 ![Architecture](pic256.png)
 
