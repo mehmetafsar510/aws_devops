@@ -601,8 +601,8 @@ Resources:
       TargetGroupARNs:
         - !Ref WebServerTG
       VPCZoneIdentifier:
-          - !Ref PublicSubnetA
-          - !Ref PublicSubnetB
+          - !Ref PrivateSubnetA
+          - !Ref PrivateSubnetB
 
   myCPUPolicy:
     Type: "AWS::AutoScaling::ScalingPolicy"
