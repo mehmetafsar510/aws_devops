@@ -8,7 +8,7 @@ Description: |
   %70 CPU utilization. Cloudfront is served as cache. This app, send data to the RDS which is located private 
   subnet and also just specific EC2 can reach RDS instance. **WARNING** This template creates an Amazon EC2 
   instance. You will be billed for the AWS resources used if you create a stack from this template. !!!Please do not
-   forget to change userdata based on your github repository!!! DATABASE Password: Clarusway1234
+   forget to change userdata based on your github repository!!! 
     
 
 Parameters:
@@ -405,9 +405,7 @@ Resources:
               Service:
               - lambda.amazonaws.com
       Path: /
-      ManagedPolicyArns: 
-        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
-        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+      ManagedPolicyArns:
         - arn:aws:iam::aws:policy/job-function/NetworkAdministrator
       Policies: 
         - PolicyName: dynamodb
@@ -417,6 +415,9 @@ Resources:
               - Effect: Allow
                 Action:
                   - "dynamodb:GetItem"
+                  - "dynamodb:BatchGetItem"
+                  - "dynamodb:Query"
+                  - "dynamodb:BatchWriteItem"
                   - "dynamodb:PutItem"
                   - "dynamodb:UpdateItem"
                 Resource: "arn:aws:dynamodb:*:*:*"
@@ -494,11 +495,6 @@ Resources:
       NotificationConfiguration:
         LambdaConfigurations:
         - Event: 's3:ObjectCreated:*'
-          Filter: 
-            S3Key:
-              Rules:
-                - Name: prefix
-                  Value: media/
           Function: !GetAtt   S3DynamoLambda.Arn
 
   myBucketPolicy:
@@ -550,7 +546,6 @@ Resources:
               - 'sts:AssumeRole'
       Path: /
       ManagedPolicyArns: 
-        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
         - arn:aws:iam::aws:policy/AmazonS3FullAccess
   WebServerLTProfile:
     Type: 'AWS::IAM::InstanceProfile'
