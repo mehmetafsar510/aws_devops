@@ -47,13 +47,13 @@ Resources:
                 Resource: '*'
 
   GreetingLambda:
-    Type: AWS::Lambda::Function
+    Type: AWS::Lambda::Function # change FROM_EMAIL_ADDRESS to your own email adress
     Properties:
       Code:
         ZipFile: |
           import boto3, os, json
           
-          FROM_EMAIL_ADDRESS = 'drmehmet510@gmail.com'
+          FROM_EMAIL_ADDRESS = 'drmehmet510@gmail.com' 
           
           ses = boto3.client('ses')
           
@@ -312,7 +312,7 @@ Resources:
     Type: "AWS::S3::Bucket"
     Properties:
       AccessControl: PublicRead
-      BucketName: staticweb2514
+      BucketName: staticwebpetcuddle
       VersioningConfiguration:
         Status: Enabled
       WebsiteConfiguration:

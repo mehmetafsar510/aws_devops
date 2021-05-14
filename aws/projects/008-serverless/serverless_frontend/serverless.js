@@ -1,5 +1,5 @@
 
-var API_ENDPOINT = 'https://bqdu3u07xl.execute-api.us-east-1.amazonaws.com/beta/pet';
+var API_ENDPOINT = 'https://xxkk4avq4j.execute-api.us-east-1.amazonaws.com/beta/pet';
 // if correct it should be similar to https://somethingsomething.execute-api.us-east-1.amazonaws.com/prod/petcuddleotron
 
 var errorDiv = document.getElementById('error-message')
