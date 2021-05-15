@@ -482,17 +482,16 @@ Resources:
                   find /var/www -type d -exec chmod 2775 {} \;
                   find /var/www -type f -exec chmod 0664 {} \;
                   systemctl restart httpd
+
+                  mysqldump -h '${onpremCatDB.PrivateIp}' -u $DBUser -p$DBPassword $DBName > a4lWordPress.sql
+                  mysql -h "${MyDBURI}" -u $DBUser -p$DBPassword $DBName < a4lWordPress.sql
+
                   cd /var/www/html
                   cp ./wp-config-sample.php ./wp-config.php
                   sed -i "s/'database_name_here'/'$DBName'/g" wp-config.php
                   sed -i "s/'username_here'/'$DBUser'/g" wp-config.php
                   sed -i "s/'password_here'/'$DBPassword'/g" wp-config.php
-                  sed -i "s/'localhost'/'$DBEndpoint'/g" wp-config.php
-
-                  mysqldump -h '${onpremCatDB.PrivateIp}' -u $DBUser -p$DBPassword $DBName > a4lWordPress.sql
-                  mysql -h "${MyDBURI}" -u $DBUser -p$DBPassword $DBName < a4lWordPress.sql
-
-                  sed -i "s/'localhost'/'${MyDBURI}'/g" /var/www/html/wp-config.php
+                  sed -i "s/'localhost'/'${MyDBURI}'/g" wp-config.php
                   systemctl restart httpd
                   
                   cat >> /home/ec2-user/update_wp_ip.sh<< 'EOF'
@@ -500,11 +499,13 @@ Resources:
                   source <(php -r 'require("/var/www/html/wp-config.php"); echo("DB_NAME=".DB_NAME."; DB_USER=".DB_USER."; DB_PASSWORD=".DB_PASSWORD."; DB_HOST=".DB_HOST); ')
                   SQL_COMMAND="mysql -u $DB_USER -h $DB_HOST -p$DB_PASSWORD $DB_NAME -e"
                   OLD_URL=$(mysql -u $DB_USER -h $DB_HOST -p$DB_PASSWORD $DB_NAME -e 'select option_value from wp_options where option_id = 1;' | grep http)
+
+                  ALBDNSNAME=`echo ${ALBDNSNAME} | sed -e 's/^"//' -e 's/"$//'`
                  
-                  $SQL_COMMAND "UPDATE wp_options SET option_value = replace(option_value, '$OLD_URL', 'http://${ALBDNSNAME})' WHERE option_name = 'home' OR option_name = 'siteurl';"
-                  $SQL_COMMAND "UPDATE wp_posts SET guid = replace(guid, '$OLD_URL','http://${ALBDNSNAME}');"
-                  $SQL_COMMAND "UPDATE wp_posts SET post_content = replace(post_content, '$OLD_URL', 'http://${ALBDNSNAME}');"
-                  $SQL_COMMAND "UPDATE wp_postmeta SET meta_value = replace(meta_value,'$OLD_URL','http://${ALBDNSNAME}');"
+                  $SQL_COMMAND "UPDATE wp_options SET option_value = replace(option_value, '$OLD_URL', 'http://$ALBDNSNAME') WHERE option_name = 'home' OR option_name = 'siteurl';"
+                  $SQL_COMMAND "UPDATE wp_posts SET guid = replace(guid, '$OLD_URL','http://$ALBDNSNAME');"
+                  $SQL_COMMAND "UPDATE wp_posts SET post_content = replace(post_content, '$OLD_URL', 'http://$ALBDNSNAME');"
+                  $SQL_COMMAND "UPDATE wp_postmeta SET meta_value = replace(meta_value,'$OLD_URL','http://$ALBDNSNAME');"
                   EOF
 
                   chmod 755 /home/ec2-user/update_wp_ip.sh
@@ -558,7 +559,15 @@ Resources:
       UserData:
           Fn::Base64: !Sub |
             #!/bin/bash -xe
-            # Configure Wordpress
+            DBPassword=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/DBPassword --with-decryption --query Parameters[0].Value)
+            DBPassword=`echo $DBPassword | sed -e 's/^"//' -e 's/"$//'`
+
+            DBUser=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/DBUser --query Parameters[0].Value)
+            DBUser=`echo $DBUser | sed -e 's/^"//' -e 's/"$//'`
+
+            DBName=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/DBName --query Parameters[0].Value)
+            DBName=`echo $DBName | sed -e 's/^"//' -e 's/"$//'`
+            
             cd /var/www/html
             cp ./wp-config-sample.php ./wp-config.php
             sed -i "s/'localhost'/'${onpremCatDB.PrivateIp}'/g" wp-config.php
@@ -682,15 +691,15 @@ Resources:
     Type: "AWS::AutoScaling::AutoScalingGroup"
     DependsOn: MyDatabaseServer
     Properties:
-      Cooldown: "200"
-      DesiredCapacity: "2"
-      HealthCheckGracePeriod: 90
+      Cooldown: 200
+      DesiredCapacity: 2
+      HealthCheckGracePeriod: 200
       HealthCheckType: ELB
       LaunchTemplate:
         LaunchTemplateId: !Ref MyLaunchTemplate
         Version: !GetAtt MyLaunchTemplate.LatestVersionNumber
-      MaxSize: "3" #required
-      MinSize: "1" #required
+      MaxSize: 3 #required
+      MinSize: 1 #required
       TargetGroupARNs:
         - !Ref WebServerTG
       VPCZoneIdentifier:
