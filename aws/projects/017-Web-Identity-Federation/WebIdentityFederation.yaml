@@ -10,17 +10,35 @@ Parameters:
     Description: The full domain name e.g. capstone.clarusway.us
     AllowedPattern: (?!-)[a-zA-Z0-9-.]{1,63}(?<!-)
     ConstraintDescription: must be a valid DNS zone name.
+    Default:        cognito.mehmetafsar.com
   CognitoEc2Domain:
     Type: String
     Description: The full domain name e.g. capstone.clarusway.us
     AllowedPattern: (?!-)[a-zA-Z0-9-.]{1,63}(?<!-)
     ConstraintDescription: must be a valid DNS zone name.
+    Default:        clarusway.mehmetafsar.com
   CognitoDomain:
     Type: String
     MinLength: 3
     MaxLength: 63
     AllowedPattern: ^[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?$
     Description: Enter a string. Must be alpha numeric 3-63 in length.
+    Default:        mehmetafsar
+  Env:
+    Description: Choose the environment to create
+    Type: String
+    Default: development
+    AllowedValues:
+      - development
+      - staging
+      - production
+  Ec2ImageId:
+    Description: AMI ID
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+  Ec2KeyName:
+    Description: Ec2 SSH KEY
+    Type: AWS::EC2::KeyPair::KeyName
   InstanceType:
     Description: WebServer EC2 instance type
     Type: String
@@ -40,10 +58,6 @@ Parameters:
       - c1.medium
       - c1.xlarge
     ConstraintDescription: must be a valid EC2 instance type.
-  
-  KeyName:
-    Description: The EC2 Key Pair to allow SSH access to the instance
-    Type: 'AWS::EC2::KeyPair::KeyName'
 Mappings:
   AWSRegionArch2AMI:
     us-east-1:
@@ -63,7 +77,6 @@ Resources:
   Ec2SecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      VpcId: !Ref 'VpcId'
       GroupDescription: Ec2 SecurityGroup
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -88,7 +101,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
-        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
   Ec2Policy:
     Type: AWS::IAM::Policy
     Properties:
@@ -141,8 +154,11 @@ Resources:
             wget https://github.com/mehmetafsar510/aws_devops/raw/master/aws/projects/017-Web-Identity-Federation/cognito.zip
             unzip cognito.zip
             cd /home/ec2-user/templates
-            sed -i "s/'change me'/'https://${CognitoDomain}.auth.us-east-1.amazoncognito.com/login?client_id=${CognitoUserPoolClient}&response_type=code&scope=email+openid+phone+profile&redirect_uri=${FullDomain}'/g" enter.html
+            sed -i "s/'change me'/'https://${CognitoDomain}.auth.us-east-1.amazoncognito.com/login?client_id=${CognitoUserPoolClient}&response_type=code&scope=email+openid+phone+profile&redirect_uri=https://${FullDomain}'/g" enter.html
             cd /home/ec2-user
+            sed -i "s/'MAKE SURE YOU REPLACE THIS'/'${CognitoId}'/g" scripts.js
+            aws s3 cp ./scripts.js s3://staticwebcognito-2514
+            aws s3 cp ./index.html s3://staticwebcognito-2514
             docker build -t mehmet .
             docker run -d --name=mehmetweb -p 80:80 mehmet:latest 
   
@@ -166,16 +182,13 @@ Resources:
     Type: AWS::S3::Bucket
     DeletionPolicy: Delete
     Properties:
-      BucketName: staticweb-2514
+      BucketName: staticwebcognito-2514
       AccessControl: PublicRead
       LifecycleConfiguration:
         Rules:
           - Id: NoncurrentVersionExpiration
             Status: Enabled
             NoncurrentVersionExpirationInDays: 45
-      LoggingConfiguration:
-        DestinationBucketName: mehmetafsar.com
-        LogFilePrefix: !Sub "${NamePrefix}-${ProjectName}-${AWS::Region}/"
       VersioningConfiguration:
         Status: Enabled
       WebsiteConfiguration:
@@ -223,7 +236,7 @@ Resources:
             AcmCertificateArn: !Ref SSLCert
             MinimumProtocolVersion: TLSv1.2_2019
             SslSupportMethod: sni-only
-        IPV6Enabled: !Ref 'IPV6Enabled'
+        IPV6Enabled: true
         Aliases: 
           - !Ref FullDomain
         DefaultRootObject: index.html
@@ -237,8 +250,8 @@ Resources:
             QueryString: true
             Cookies:
               Forward: none
-          DefaultTTL: !Ref CacheDefault
-          ViewerProtocolPolicy: !Ref 'ViewerProtocolPolicy'
+          DefaultTTL: 1800
+          ViewerProtocolPolicy: redirect-to-https
           TargetOriginId: Bucket
         Origins:
           - Id: Bucket
@@ -264,113 +277,12 @@ Resources:
   patchesprivatebucket:
     Type: AWS::S3::Bucket
     Properties:
-        CorsConfiguration:
-          CorsRules:
-            - AllowedHeaders: ['*']
-              AllowedMethods: ['GET', 'HEAD']
-              AllowedOrigins: ['*']
-
-  CopyS3ObjectsFunction:
-    Type: AWS::Lambda::Function
-    Properties:
-      Description: Copies objects into buckets
-      Handler: index.handler
-      Runtime: python3.8
-      Role: !GetAtt S3CopyRole.Arn
-      Timeout: 120
-      Code:
-        ZipFile: |
-          import os 
-          import json
-          import cfnresponse
-          import boto3
-          import logging
-
-          from botocore.exceptions import ClientError
-          client = boto3.client('s3')
-          logger = logging.getLogger()
-          logger.setLevel(logging.INFO)
-
-          def handler(event, context):
-            logger.info("Received event: %s" % json.dumps(event))
-            source_bucket = event['ResourceProperties']['SourceBucket']
-            source_prefix = event['ResourceProperties'].get('SourcePrefix') or ''
-            bucket = event['ResourceProperties']['Bucket']
-            prefix = event['ResourceProperties'].get('Prefix') or ''
-
-            result = cfnresponse.SUCCESS
-
-            try:
-              if event['RequestType'] == 'Create' or event['RequestType'] == 'Update':
-                result = copy_objects(source_bucket, source_prefix, bucket, prefix)
-              elif event['RequestType'] == 'Delete':
-                result = delete_objects(bucket, prefix)
-            except ClientError as e:
-              logger.error('Error: %s', e)
-              result = cfnresponse.FAILED
-
-            cfnresponse.send(event, context, result, {})
-
-          def copy_objects(source_bucket, source_prefix, bucket, prefix):
-            paginator = client.get_paginator('list_objects_v2')
-            page_iterator = paginator.paginate(Bucket=source_bucket, Prefix=source_prefix)
-            for key in {x['Key'] for page in page_iterator for x in page['Contents']}:
-              dest_key = os.path.join(prefix, os.path.relpath(key, source_prefix))
-              if not key.endswith('/'):
-                print 'copy {} to {}'.format(key, dest_key)
-                client.copy_object(CopySource={'Bucket': source_bucket, 'Key': key}, Bucket=bucket, Key = dest_key)
-            return cfnresponse.SUCCESS
-
-          def delete_objects(bucket, prefix):
-            paginator = client.get_paginator('list_objects_v2')
-            page_iterator = paginator.paginate(Bucket=bucket, Prefix=prefix)
-            objects = [{'Key': x['Key']} for page in page_iterator for x in page['Contents']]
-            client.delete_objects(Bucket=bucket, Delete={'Objects': objects})
-            return cfnresponse.SUCCESS
-  S3CopyRole:
-    Type: AWS::IAM::Role
-    Properties:
-      Path: /
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          -
-            Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        -
-          PolicyName: S3Access
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              -
-                Sid: AllowLogging
-                Effect: Allow
-                Action:
-                  - "logs:CreateLogGroup"
-                  - "logs:CreateLogStream"
-                  - "logs:PutLogEvents"
-                Resource: "*"
-              
-              -
-                Sid: WriteToStudentBuckets
-                Effect: Allow
-                Action:
-                  - "s3:ListBucket"
-                  - "s3:GetObject"
-                  - "s3:PutObject"
-                  - "s3:PutObjectAcl"
-                  - "s3:PutObjectVersionAcl"
-                  - "s3:DeleteObject"
-                  - "s3:DeleteObjectVersion"
-                  - "s3:CopyObject"
-                Resource:
-                  - !Sub "arn:aws:s3:::${appbucket}"
-                  - !Sub "arn:aws:s3:::${appbucket}/*"
-                  - !Sub "arn:aws:s3:::${patchesprivatebucket}"
-                  - !Sub "arn:aws:s3:::${patchesprivatebucket}/*"
+      BucketName: staticwebcognitoprivate-2514
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ['*']
+            AllowedMethods: ['GET', 'HEAD']
+            AllowedOrigins: ['*']
   privatepatchespolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
@@ -426,7 +338,11 @@ Resources:
       UserPoolId: !Ref UserPool
       AllowedOAuthFlowsUserPoolClient: true
       CallbackURLs:
-        - !Ref FullDomain
+        - !Join
+            - ''
+            - - 'https://'
+              - !Ref FullDomain
+              
       AllowedOAuthFlows:
         - code
         - implicit
@@ -543,25 +459,18 @@ Resources:
                   - "cognito-sync:*"
                 Resource: "*"
 Outputs:
-  WebsiteURL:
-    Value: !GetAtt 
-      - appbucket
-      - WebsiteURL
-    Description: URL for website hosted on S3
-  S3BucketSecureURL:
+  FullDomainname:
     Value: !Join 
       - ''
       - - 'https://'
-        - !GetAtt 
-          - appbucket
-          - DomainName
+        - !Ref FullDomain
     Description: app bucket URL for Google
-  CognitoUserPoolID:
-    Value: !Ref UserPool
-    Description: The UserPool ID
-  CognitoAppClientID:
-    Value: !Ref CognitoUserPoolClient
-    Description: The app client
+  Ec2Domainname:
+    Value: !Join 
+      - ''
+      - - 'http://'
+        - !Ref CognitoEc2Domain
+    Description: URL for Cognito html page
   HostedUIURL:
-    Value: !Sub https://${CognitoDomain}.auth.us-east-1.amazoncognito.com/login?client_id=${CognitoUserPoolClient}&response_type=code&scope=email+openid+phone+profile&redirect_uri=
+    Value: !Sub https://${CognitoDomain}.auth.us-east-1.amazoncognito.com/login?client_id=${CognitoUserPoolClient}&response_type=code&scope=email+openid+phone+profile&redirect_uri=https://${FullDomain}
     Description: The hosted UI URL
