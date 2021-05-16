@@ -1,6 +1,164 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description:  You will be implementing a simple serverless application which uses Web Identity Federation.
+Parameters:
+
+  DomainRoot:
+    Type: AWS::Route53::HostedZone::Id
+    Description: The DNS name of an existing Amazon Route 53 hosted zone e.g. clarusway.us
+  FullDomain:
+    Type: String
+    Description: The full domain name e.g. capstone.clarusway.us
+    AllowedPattern: (?!-)[a-zA-Z0-9-.]{1,63}(?<!-)
+    ConstraintDescription: must be a valid DNS zone name.
+  InstanceType:
+    Description: WebServer EC2 instance type
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t1.micro
+      - t2.micro
+      - m1.small
+      - m1.medium
+      - m1.large
+      - m1.xlarge
+      - m2.xlarge
+      - m2.2xlarge
+      - m2.4xlarge
+      - m3.xlarge
+      - m3.2xlarge
+      - c1.medium
+      - c1.xlarge
+    ConstraintDescription: must be a valid EC2 instance type.
+  CognitoDomain:
+    Type: String
+    MinLength: 3
+    MaxLength: 63
+    AllowedPattern: ^[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?$
+    Description: Enter a string. Must be alpha numeric 3-63 in length.
+  KeyName:
+    Description: The EC2 Key Pair to allow SSH access to the instance
+    Type: 'AWS::EC2::KeyPair::KeyName'
+Mappings:
+  AWSRegionArch2AMI:
+    us-east-1:
+      '64': ami-013f17f36f8b1fefb
+    us-east-2:
+      '64': ami-03657b56516ab7912
+    us-west-1:
+      '64': ami-0e4035ae3f70c400f 
+    us-west-2:
+      '64': ami-01fee56b22f308154
+    eu-central-1:
+      '64': ami-00a205cb8e06c3c4e
+    eu-central-2:
+      '64': ami-0bb3fad3c0286ebd5
+
 Resources:
+  OriginAccessIdentity:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: !Sub Static assets in ${AWS::StackName}
+
+  appbucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      BucketName: staticweb-2514
+      AccessControl: PublicRead
+      LifecycleConfiguration:
+        Rules:
+          - Id: NoncurrentVersionExpiration
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 45
+      LoggingConfiguration:
+        DestinationBucketName: mehmetafsar.com
+        LogFilePrefix: !Sub "${NamePrefix}-${ProjectName}-${AWS::Region}/"
+      VersioningConfiguration:
+        Status: Enabled
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+      Tags:
+        - Key: CloudFormationArn
+          Value: !Sub '${AWS::StackName}'
+
+  WebBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref appbucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+            Resource: !Join
+              - ""
+              - - !GetAtt appbucket.Arn
+                - "/*"
+            Principal:
+              CanonicalUser: !GetAtt OriginAccessIdentity.S3CanonicalUserId
+
+  SSLCert:
+    Type: "AWS::CertificateManager::Certificate"
+    Properties:
+      CertificateTransparencyLoggingPreference: ENABLED
+      DomainName: !Ref FullDomain #required
+      DomainValidationOptions:
+        - DomainName: !Ref FullDomain
+          HostedZoneId: !Ref DomainRoot
+      ValidationMethod: DNS
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        HttpVersion: http2
+        PriceClass: PriceClass_100
+        ViewerCertificate: 
+            AcmCertificateArn: !Ref SSLCert
+            MinimumProtocolVersion: TLSv1.2_2019
+            SslSupportMethod: sni-only
+        IPV6Enabled: !Ref 'IPV6Enabled'
+        Aliases: 
+          - !Ref FullDomain
+        DefaultRootObject: index.html
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - HEAD
+            - GET
+            - OPTIONS
+          Compress: true
+          ForwardedValues:
+            QueryString: true
+            Cookies:
+              Forward: none
+          DefaultTTL: !Ref CacheDefault
+          ViewerProtocolPolicy: !Ref 'ViewerProtocolPolicy'
+          TargetOriginId: Bucket
+        Origins:
+          - Id: Bucket
+            DomainName: !GetAtt appbucket.DomainName
+            S3OriginConfig:
+              OriginAccessIdentity: !Join
+                - /
+                - - origin-access-identity
+                  - cloudfront
+                  - !Ref OriginAccessIdentity
+
+
+  FullDomainRecords:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: !Ref DomainRoot
+      RecordSets: 
+        - Name: !Ref FullDomain
+          Type: A
+          AliasTarget:
+            HostedZoneId: Z2FDTNDATAQYW2
+            DNSName: !GetAtt Distribution.DomainName
   patchesprivatebucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -9,35 +167,6 @@ Resources:
             - AllowedHeaders: ['*']
               AllowedMethods: ['GET', 'HEAD']
               AllowedOrigins: ['*']
-  appbucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: false
-        BlockPublicPolicy: false
-        IgnorePublicAcls: false
-        RestrictPublicBuckets: false
-      AccessControl: PublicRead
-      WebsiteConfiguration:
-        IndexDocument: index.html
-        ErrorDocument: error.html
-  BucketPolicy:
-    Type: AWS::S3::BucketPolicy
-    Properties:
-      PolicyDocument:
-        Id: MyPolicy
-        Version: 2012-10-17
-        Statement:
-          - Sid: PublicReadForGetBucketObjects
-            Effect: Allow
-            Principal: '*'
-            Action: 's3:GetObject'
-            Resource: !Join 
-              - ''
-              - - 'arn:aws:s3:::'
-                - !Ref appbucket
-                - /*
-      Bucket: !Ref appbucket
 
   CopyS3ObjectsFunction:
     Type: AWS::Lambda::Function
@@ -159,42 +288,20 @@ Resources:
               - !Sub "arn:aws:s3:::${patchesprivatebucket}"
               - !Sub "arn:aws:s3:::${patchesprivatebucket}/*"
 
-  CognitoUserPool:
+  UserPool:
     Type: AWS::Cognito::UserPool
     Properties:
-      UserPoolName: google-user-pool
-      AliasAttributes:
-        - email
+      UsernameConfiguration: 
+        CaseSensitive: false
       AutoVerifiedAttributes:
         - email
-      AdminCreateUserConfig:
-        AllowAdminCreateUserOnly: True
-        InviteMessageTemplate:
-          EmailMessage:
-            !Sub |
-              <p>You are invited to join the google dashboard. Your dashboard credentials are as follows:</p>
-              <p>
-              Username: <strong>{username}</strong><br />
-              Password: <strong>{####}</strong>
-              </p>
-              <p>
-              Please sign in to the dashboard with the user name and your temporary password provided above at: <br />
-              
-              </p>
-          EmailSubject: "Your google Dashboard Login"
-        UnusedAccountValidityDays: 7
-      EmailVerificationMessage:
-        !Sub |
-          <p>You are invited to join the google dashboard. Your dashboard credentials are as follows:</p>
-          <p>
-          Username: <strong>{username}</strong><br />
-          Password: <strong>{####}</strong>
-          </p>
-          <p>
-          Please sign in to the dashboard with the user name and temporary password provided above at: <br />
-        
-          </p>
-      EmailVerificationSubject: "Your Google Dashboard Login"
+      UserPoolName: !Sub ${CognitoDomain}-user-pool
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Mutable: false
+          Required: true
+          
       Policies:
         PasswordPolicy:
           MinimumLength: 8
@@ -202,10 +309,7 @@ Resources:
           RequireNumbers: True
           RequireSymbols: False
           RequireUppercase: True
-      Schema:
-        - AttributeDataType: String
-          Name: email
-          Required: True
+     
 
   CognitoUserPoolClient:
     Type: AWS::Cognito::UserPoolClient
@@ -217,7 +321,25 @@ Resources:
       ReadAttributes:
         - email
       RefreshTokenValidity: 1
-      UserPoolId: !Ref CognitoUserPool
+      UserPoolId: !Ref UserPool
+      AllowedOAuthFlowsUserPoolClient: true
+      CallbackURLs:
+        - !Ref FullDomain
+      AllowedOAuthFlows:
+        - code
+        - implicit
+      AllowedOAuthScopes:
+        - phone
+        - email
+        - openid
+        - profile
+      SupportedIdentityProviders:
+        - COGNITO
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Ref CognitoDomain
+      UserPoolId: !Ref UserPool
 
   CognitoUserPoolIdentityProvider:
     Type: AWS::Cognito::UserPoolIdentityProvider
@@ -231,7 +353,7 @@ Resources:
         authorize_scopes: email openid
       ProviderType: Google
       UserPoolId: 
-        Ref: CognitoUserPool
+        Ref: UserPool
 
   CognitoId:
     Type: "AWS::Cognito::IdentityPool"
@@ -331,4 +453,13 @@ Outputs:
         - !GetAtt 
           - appbucket
           - DomainName
-    Description: app bucket URL
+    Description: app bucket URL for Google
+  CognitoUserPoolID:
+    Value: !Ref UserPool
+    Description: The UserPool ID
+  CognitoAppClientID:
+    Value: !Ref CognitoUserPoolClient
+    Description: The app client
+  HostedUIURL:
+    Value: !Sub https://${CognitoDomain}.auth.us-east-1.amazoncognito.com/login?client_id=${CognitoUserPoolClient}&response_type=code&scope=email+openid+phone+profile&redirect_uri=
+    Description: The hosted UI URL
