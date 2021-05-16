@@ -10,6 +10,17 @@ Parameters:
     Description: The full domain name e.g. capstone.clarusway.us
     AllowedPattern: (?!-)[a-zA-Z0-9-.]{1,63}(?<!-)
     ConstraintDescription: must be a valid DNS zone name.
+  CognitoEc2Domain:
+    Type: String
+    Description: The full domain name e.g. capstone.clarusway.us
+    AllowedPattern: (?!-)[a-zA-Z0-9-.]{1,63}(?<!-)
+    ConstraintDescription: must be a valid DNS zone name.
+  CognitoDomain:
+    Type: String
+    MinLength: 3
+    MaxLength: 63
+    AllowedPattern: ^[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?$
+    Description: Enter a string. Must be alpha numeric 3-63 in length.
   InstanceType:
     Description: WebServer EC2 instance type
     Type: String
@@ -29,12 +40,7 @@ Parameters:
       - c1.medium
       - c1.xlarge
     ConstraintDescription: must be a valid EC2 instance type.
-  CognitoDomain:
-    Type: String
-    MinLength: 3
-    MaxLength: 63
-    AllowedPattern: ^[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?$
-    Description: Enter a string. Must be alpha numeric 3-63 in length.
+  
   KeyName:
     Description: The EC2 Key Pair to allow SSH access to the instance
     Type: 'AWS::EC2::KeyPair::KeyName'
@@ -54,6 +60,102 @@ Mappings:
       '64': ami-0bb3fad3c0286ebd5
 
 Resources:
+  Ec2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref 'VpcId'
+      GroupDescription: Ec2 SecurityGroup
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+  Ec2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+  Ec2Policy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: Ec2RolePolicies
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - ssm:StartSession
+            Resource:
+              - '*'
+      Roles:
+        - !Ref 'Ec2Role'
+
+  Ec2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    DependsOn: Ec2Role
+    Properties:
+      Path: /
+      Roles:
+        - !Ref 'Ec2Role'
+
+  MyEc2Logs:
+    Type: "AWS::EC2::Instance"
+    Properties:     
+      SecurityGroupIds:
+        - !Ref 'Ec2SecurityGroup'
+      Tags:
+        - Key: Env
+          Value: !Ref 'Env'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}'
+      IamInstanceProfile: !Ref 'Ec2InstanceProfile'
+      KeyName: !Ref 'Ec2KeyName'
+      ImageId: !Ref Ec2ImageId
+      Monitoring: true
+      InstanceType: t2.micro
+      UserData: !Base64
+          Fn::Sub: |
+            #!/bin/bash -xe
+            yum update -y
+            amazon-linux-extras install docker -y
+            systemctl start docker
+            systemctl enable docker
+            usermod -a -G docker ec2-user
+            newgrp docker
+            yum install python3 -y
+            yum install git -y
+            wget https://github.com/mehmetafsar510/aws_devops/raw/master/aws/projects/017-Web-Identity-Federation/cognito.zip
+            unzip cognito.zip
+            cd /home/ec2-user/templates
+            sed -i "s/'change me'/'https://${CognitoDomain}.auth.us-east-1.amazoncognito.com/login?client_id=${CognitoUserPoolClient}&response_type=code&scope=email+openid+phone+profile&redirect_uri=${FullDomain}'/g" enter.html
+            cd /home/ec2-user
+            docker build -t mehmet .
+            docker run -d --name=mehmetweb -p 80:80 mehmet:latest 
+  
+  myDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref DomainRoot
+      Comment: DNS name for my instance.
+      Name: !Ref CognitoEc2Domain
+      Type: A
+      TTL: 900
+      ResourceRecords:
+      - !GetAtt MyEc2Logs.PublicIp
   OriginAccessIdentity:
     Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
     Properties:
