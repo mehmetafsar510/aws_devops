@@ -142,29 +142,30 @@ Resources:
       InstanceType: t2.micro
       UserData: 
         Fn::Base64:
-          !Sub
-            - | 
-              #!/bin/bash -xe
-              yum update -y
-              amazon-linux-extras install docker -y
-              systemctl start docker
-              systemctl enable docker
-              usermod -a -G docker ec2-user
-              newgrp docker
-              yum install python3 -y
-              yum install git -y
-              cd /home/ec2-user
-              wget https://github.com/mehmetafsar510/aws_devops/raw/master/aws/projects/017-Web-Identity-Federation/cognito.zip
-              unzip cognito.zip
-              cd /home/ec2-user/templates
-              sed -i "s/'change me'/'https://${CognitoDomain}.auth.us-east-1.amazoncognito.com/login?client_id=${MyDBURI}&response_type=code&scope=email+openid+phone+profile&redirect_uri=https://${FullDomain}'/g" enter.html
-              cd /home/ec2-user
-              sed -i "s/'MAKE SURE YOU REPLACE THIS'/'${CognitoId}'/g" scripts.js
-              aws s3 cp ./scripts.js s3://staticwebcognito-2514
-              aws s3 cp ./index.html s3://staticwebcognito-2514
-              docker build -t mehmet .
-              docker run -d --name=mehmetweb -p 80:80 mehmet:latest 
-            - MyDBURI: !Ref CognitoUserPoolClient
+          !Sub | 
+            #!/bin/bash -xe
+            yum update -y
+            amazon-linux-extras install docker -y
+            systemctl start docker
+            systemctl enable docker
+            usermod -a -G docker ec2-user
+            newgrp docker
+            yum install python3 -y
+            yum install git -y
+            cd /home/ec2-user
+            wget https://github.com/mehmetafsar510/aws_devops/raw/master/aws/projects/017-Web-Identity-Federation/cognito.zip
+            unzip cognito.zip
+            cd /home/ec2-user/templates
+            sed -i "s|'change me'|'https://${CognitoDomain}.auth.us-east-1.amazoncognito.com/login?client_id=${CognitoUserPoolClient}\&response_type=code\&scope=email+openid+phone+profile\&redirect_uri=https://${FullDomain}'|g" enter.html
+            cd /home/ec2-user
+            sed -i "s|'MAKE SURE YOU REPLACE THIS'|'${CognitoId}'|g" scripts.js
+            aws s3 cp ./scripts.js s3://staticwebcognito-2514
+            aws s3 cp ./index.html s3://staticwebcognito-2514
+            aws s3 cp ./patches1.jpg s3://staticwebcognitoprivate-2514
+            aws s3 cp ./patches2.jpg s3://staticwebcognitoprivate-2514
+            aws s3 cp ./patches3.jpg s3://staticwebcognitoprivate-2514
+            docker build -t mehmet .
+            docker run -d --name=mehmetweb -p 80:80 mehmet:latest
   
   myDNSRecord:
     Type: AWS::Route53::RecordSet
