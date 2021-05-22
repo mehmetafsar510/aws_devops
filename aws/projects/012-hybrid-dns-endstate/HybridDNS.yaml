@@ -1,4 +1,12 @@
-Description:  Animals4Life Hybrid DNS Demo
+AWSTemplateFormatVersion: 2010-09-09
+Description: |
+  AWS CloudFormation Sample Template vpc_multiple_subnets, vpc-entpoints, System-manager, Route53 resolver
+  template showing how to create an architecture Hybrid dns system. There are two vpcs one show us to ON-PREMISES the other show
+  us to AWS envirenment. You have created a VPC Peering connection between `AWS` and `ON-PREMISES` which provides IP 
+  connectivity between the two environments. Amazon EC2 instances must be registered as managed instances to be managed with AWS Systems Manager.
+  You have configured inbound integration and outbound integration with help of Route 53 resolver. **WARNING** This template creates an Amazon EC2 
+  instance. You will be billed for the AWS resources used if you create a stack from this template. 
+
 Parameters:
   LatestAmiId:
     Description: AMI for EC2 instances (default = AmaLinux Latest)
@@ -64,6 +72,11 @@ Resources:
           IpProtocol: tcp
           FromPort: 80
           ToPort: 80
+          CidrIp: '0.0.0.0/0'
+        - Description: 'Allow HTTPS IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
           CidrIp: '0.0.0.0/0'
         - Description: 'Allow DNS IN'
           IpProtocol: "-1"
@@ -232,7 +245,7 @@ Resources:
           chkconfig named on
   ONPREMAPP:
     Type: AWS::EC2::Instance
-    DependsOn: 
+    DependsOn:
       - onpremssminterfaceendpoint
       - onpremssmec2messagesinterfaceendpoint
       - onpremssmmessagesinterfaceendpoint
@@ -251,8 +264,36 @@ Resources:
           #!/bin/bash -xe
           yum update -y
           su
-          echo -e "DNS1=ONPREMDNSA.PrivateIp \nDNS2=ONPREMDNSB.PrivateIp " >> /etc/sysconfig/network-scripts/ifcfg-eth0
+          cd /home/ec2-user
+          sleep 100
+          aws s3 cp s3://mehmetafsar.com/ifcfg-eth0 . 
+          mv -f ifcfg-eth0 /etc/sysconfig/network-scripts/
+          reboot
           
+  ONPREMDNSIP:
+    Type: AWS::EC2::Instance
+    DependsOn: 
+      - onpremssminterfaceendpoint
+      - onpremssmec2messagesinterfaceendpoint
+      - onpremssmmessagesinterfaceendpoint
+    Properties:
+      InstanceType: "t2.micro"
+      ImageId: !Ref LatestAmiId
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SubnetId: !Ref ONPREMSubnetPRIVATEB
+      SecurityGroupIds: 
+        - !Ref ONPREMSecurityGroup
+      Tags:
+        - Key: Name
+          Value: A4L-ONPREM-DNSIP
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          yum update -y
+          su
+          echo -e "DNS1=${ONPREMDNSA.PrivateIp} \nDNS2=${ONPREMDNSB.PrivateIp} " >> /etc/sysconfig/network-scripts/ifcfg-eth0 
+          cd /etc/sysconfig/network-scripts/
+          aws s3 cp ./ifcfg-eth0 s3://mehmetafsar.com      
           
 
   EC2Role:
