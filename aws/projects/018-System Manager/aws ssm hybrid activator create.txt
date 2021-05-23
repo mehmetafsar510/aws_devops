@@ -1,10 +1,7 @@
 aws ssm create-activation \
-    --default-instance-name "A4L-ONPREM" \
-    --iam-role "HybridSSMServiceRole" \
-    ---expiration-date "2021-07-07T00:00:00" \
-    --registration-limit 10
-
-
-aws iam create-role --role-name HybridSSMServiceRole --assume-role-policy-document file://SSMService-Trust.json
-
-aws iam delete-role --role-name HybridSSMServiceRole
+  --default-instance-name MyWebServers \
+  --description "Activation for Finance department webservers" \
+  --iam-role service-role/AmazonEC2RunCommandRoleForManagedInstances \
+  --registration-limit 10 \
+  --region us-east-1 \
+  --tags "Key=Department,Value=Finance"

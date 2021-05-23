@@ -30,6 +30,22 @@ Parameters:
     Description: KeyPair for Instances
     Type: AWS::EC2::KeyPair::KeyName
     Default: "A4L"
+  ActivationCode:
+    ConstraintDescription: must begin with a letter and contain only alphanumeric
+      characters.
+    Default: awscapstone
+    Description: Capstone database name
+    MaxLength: '64'
+    MinLength: '1'
+    Type: String
+  ActivationId:
+    ConstraintDescription: must begin with a letter and contain only alphanumeric
+      characters.
+    Default: awscapstone
+    Description: Capstone database name
+    MaxLength: '64'
+    MinLength: '1'
+    Type: String
   WindowsAMI:
     Description: AMI for Windows Server
     Type: String
@@ -281,6 +297,57 @@ Resources:
       GroupId: !Ref AWSInstanceSG
       IpProtocol: '-1'
       SourceSecurityGroupId: !Ref AWSInstanceSG
+  AWSVPCESSM:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: "Interface"
+      PrivateDnsEnabled: True
+      SubnetIds:
+        - !Ref AWSSNPrivate
+      SecurityGroupIds:
+        - !Ref AWSInstanceSG
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
+      VpcId: !Ref AWSVPC
+  AWSVPCEEC2Messages:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: "Interface"
+      PrivateDnsEnabled: True
+      SubnetIds:
+        - !Ref AWSSNPrivate
+      SecurityGroupIds:
+        - !Ref AWSInstanceSG
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2messages
+      VpcId: !Ref AWSVPC
+  AWSVPCESSMMessages:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: "Interface"
+      PrivateDnsEnabled: True
+      SubnetIds:
+        - !Ref AWSSNPrivate
+      SecurityGroupIds:
+        - !Ref AWSInstanceSG
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssmmessages
+      VpcId: !Ref AWSVPC
+  AWSVPCESEC2:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: "Interface"
+      PrivateDnsEnabled: True
+      SubnetIds:
+        - !Ref AWSSNPrivate
+      SecurityGroupIds:
+        - !Ref AWSInstanceSG
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2
+      VpcId: !Ref AWSVPC
+  AWSVPCES3:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      RouteTableIds:
+        - !Ref AWSRTPrivate
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcId: !Ref AWSVPC
   onpremVPCESSM:
     Type: AWS::EC2::VPCEndpoint
     Properties:
@@ -497,8 +564,6 @@ Resources:
         - Enabled
         windowsRoles:
         - Enabled
-
-
   SSMRole:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -522,10 +587,14 @@ Resources:
         - !Ref SSMRole
 
   A4LWIN:
+    DependsOn:
+      - "onpremVPCESSM"
+      - "onpremVPCEEC2Messages"
+      - "onpremVPCESSMMessages"
+      - "onpremVPCESEC2"
     Type: AWS::EC2::Instance
     Properties:
       ImageId: !Ref 'WindowsAMI'
-      IamInstanceProfile: !Ref SSMInstanceProfile
       InstanceType: 't2.micro'
       SubnetId: !Ref 'OnpremSNPrivate'
       Tags:
@@ -541,12 +610,8 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           <script>
-          ActivationId=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/ActivationId --with-decryption --query Parameters[0].Value)
-          ActivationId=`echo $ActivationId | sed -e 's/^"//' -e 's/"$//'`
-          ActivationCode=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/ActivationId --with-decryption --query Parameters[0].Value)
-          ActivationCode=`echo $ActivationCode | sed -e 's/^"//' -e 's/"$//'`
-          $code = "$ActivationCode"
-          $id = "$ActivationId"
+          $code = "${ActivationCode}"
+          $id = "${ActivationId}"
           $region = "us-east-1"
           $dir = $env:TEMP + "\ssm"
           New-Item -ItemType directory -Path $dir -Force
@@ -558,10 +623,14 @@ Resources:
           </script>
           
   A4LCENTOS:
+    DependsOn:
+      - "onpremVPCESSM"
+      - "onpremVPCEEC2Messages"
+      - "onpremVPCESSMMessages"
+      - "onpremVPCESEC2"
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: !Ref 'CentosAMI' 
-      IamInstanceProfile: !Ref SSMInstanceProfile
+      ImageId: !Ref 'CentosAMI'
       InstanceType: 't2.micro'
       SubnetId: !Ref 'OnpremSNPrivate'
       Tags:
@@ -578,22 +647,22 @@ Resources:
         Fn::Base64: !Sub |
           #!/bin/bash -xe
           yum install python3 -y
-          ActivationId=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/ActivationId --with-decryption --query Parameters[0].Value)
-          ActivationId=`echo $ActivationId | sed -e 's/^"//' -e 's/"$//'`
-          ActivationCode=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/ActivationId --with-decryption --query Parameters[0].Value)
-          ActivationCode=`echo $ActivationCode | sed -e 's/^"//' -e 's/"$//'`
           mkdir /tmp/ssm
           curl https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm -o /tmp/ssm/amazon-ssm-agent.rpm
           yum install -y /tmp/ssm/amazon-ssm-agent.rpm
           systemctl stop amazon-ssm-agent
-          amazon-ssm-agent -register -code "$ActivationCode" -id "$ActivationId" -region "us-east-1"
+          amazon-ssm-agent -register -code "${ActivationCode}" -id "${ActivationId}" -region "us-east-1"
           systemctl start amazon-ssm-agent
 
   A4LUBUNTU:
+    DependsOn:
+      - "onpremVPCESSM"
+      - "onpremVPCEEC2Messages"
+      - "onpremVPCESSMMessages"
+      - "onpremVPCESEC2"
     Type: AWS::EC2::Instance
     Properties:
       ImageId: !Ref 'UbuntuAMI'
-      IamInstanceProfile: !Ref SSMInstanceProfile
       InstanceType: 't2.micro'
       SubnetId: !Ref 'OnpremSNPrivate'
       Tags:
@@ -610,15 +679,11 @@ Resources:
         Fn::Base64: !Sub |
           #!/bin/bash -xe
           snap remove amazon-ssm-agent
-          ActivationId=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/ActivationId --with-decryption --query Parameters[0].Value)
-          ActivationId=`echo $ActivationId | sed -e 's/^"//' -e 's/"$//'`
-          ActivationCode=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/ActivationId --with-decryption --query Parameters[0].Value)
-          ActivationCode=`echo $ActivationCode | sed -e 's/^"//' -e 's/"$//'`
           mkdir /tmp/ssm
           curl https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/debian_amd64/amazon-ssm-agent.deb -o /tmp/ssm/amazon-ssm-agent.deb
           dpkg -i /tmp/ssm/amazon-ssm-agent.deb
           service amazon-ssm-agent stop
-          amazon-ssm-agent -register -code "$ActivationCode" -id "$ActivationId" -region "us-east-1" 
+          amazon-ssm-agent -register -code "${ActivationCode}" -id "${ActivationId}" -region "us-east-1" 
           service amazon-ssm-agent start
   AWSWIN:
     Type: AWS::EC2::Instance
