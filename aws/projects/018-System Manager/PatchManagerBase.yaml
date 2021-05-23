@@ -34,7 +34,7 @@ Parameters:
     ConstraintDescription: must begin with a letter and contain only alphanumeric
       characters.
     Default: awscapstone
-    Description: Capstone database name
+    Description: Hybrid Activations Code
     MaxLength: '64'
     MinLength: '1'
     Type: String
@@ -42,7 +42,7 @@ Parameters:
     ConstraintDescription: must begin with a letter and contain only alphanumeric
       characters.
     Default: awscapstone
-    Description: Capstone database name
+    Description: Hybrid Activations Id
     MaxLength: '64'
     MinLength: '1'
     Type: String
