@@ -1,0 +1,95 @@
+- name: Install docker
+  gather_facts: No
+  any_errors_fatal: true
+  hosts: _postgre
+  become: true
+  tasks:
+    - name: upgrade all packages
+      yum: 
+        name: '*'
+        state: latest
+    # we may need to uninstall any existing docker files from the centos repo first. 
+    - name: Remove docker if installed from CentOS repo
+      yum:
+        name: "{{ item }}"
+        state: removed
+      with_items:
+        - docker
+        - docker-client
+        - docker-client-latest
+        - docker-common
+        - docker-latest
+        - docker-latest-logrotate
+        - docker-logrotate
+        - docker-engine
+    - name: Install yum utils
+      yum:
+        name: "{{ item }}"
+        state: latest
+      with_items:
+        - yum-utils
+        - device-mapper-persistent-data
+        - lvm2
+  # yum-utils is a collection of tools and programs for managing yum repositories, installing debug packages, source packages, extended information from repositories and administration.
+    - name: Add Docker repo
+      get_url:
+        url: https://download.docker.com/linux/centos/docker-ce.repo
+        dest: /etc/yum.repos.d/docer-ce.repo
+    - name: Install Docker
+      package:
+        name: docker-ce
+        state: latest
+    - name: Install pip
+      package: 
+        name: python3-pip
+        state: present
+        update_cache: true
+    - name: Install docker sdk
+      pip:
+        name: docker
+    - name: Add user ec2-user to docker group
+      user:
+        name: ec2-user
+        groups: docker
+        append: yes
+    - name: Start Docker service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+    - name: create build directory
+      file:
+        path: /home/ec2-user/postgresql
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+    - name: copy the sql script
+      copy:
+        src: /home/ec2-user/ansible-Project/postgres/init.sql
+        dest: /home/ec2-user/postgresql
+    - name: copy the Dockerfile
+      copy:
+        src: /home/ec2-user/ansible-Project/postgres/Dockerfile
+        dest: /home/ec2-user/postgresql
+    - name: remove serdar_postgre container and serdarcw/postgre if exists
+      shell: "docker ps -q --filter 'name=serdar_postgre' | grep -q . && docker stop serdar_postgre && docker rm -fv serdar_postgre && docker image rm -f serdarcw/postgre || echo 'Not Found'"
+    - name: build container image
+      docker_image:
+        name: serdarcw/postgre
+        build:
+          path: /home/ec2-user/postgresql
+        source: build
+        state: present
+    - name: Launch postgresql docker container
+      docker_container:
+        name: serdar_postgre
+        image: serdarcw/postgre
+        state: started
+        ports: 
+        - "5432:5432"
+        env:
+          POSTGRES_PASSWORD: "Pp123456789"
+        volumes:
+          - /custom/mount:/var/lib/postgresql/data
+      register: docker_info
