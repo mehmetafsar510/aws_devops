@@ -5,6 +5,10 @@ Description: >-
 Metadata:
   LICENSE: Apache License Version 2.0
 Parameters:
+  ReplicationTaskIdentifier:
+    Default: ec2db-rds-dms
+    Description: AWS DMS Replication Task name used for this blog
+    Type: String
   UseExistingReplicationTask: 
     Default: "no"
     Type: String
@@ -58,10 +62,7 @@ Parameters:
     Description: AMI for Instance (default is latest AmaLinux2)
     Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
     Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
-  ReplicationTaskIdentifier:
-    Default: ec2db-rds-dms
-    Description: AWS DMS Replication Task name used for this blog
-    Type: String
+  
   MyKeypair:
     Description: My key pair
     Type: AWS::EC2::KeyPair::KeyName
@@ -70,7 +71,7 @@ Parameters:
     AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
     ConstraintDescription: must begin with a letter and contain only alphanumeric
       characters.
-    Default: a4lwordpress
+    Default: clarusway
     Description: The WordPress database name
     MaxLength: '64'
     MinLength: '1'
@@ -81,13 +82,13 @@ Parameters:
     Description: The WordPress database admin account password
     MaxLength: '41'
     MinLength: '8'
-    Default: 'cats-dogs-rabbits-chickens'
+    Default: 'wordpress'
     Type: String
   DBRootPassword:
     AllowedPattern: '^[A-Za-z][a-zA-Z0-9@%$_-]{8,41}$'
     ConstraintDescription: must contain only alphanumeric characters.
     Description: MySQL root password
-    Default: 'cats-dogs-rabbits-chickens'
+    Default: 'wordpress'
     MaxLength: '41'
     MinLength: '8'
     Type: String
@@ -96,7 +97,7 @@ Parameters:
     ConstraintDescription: must begin with a letter and contain only alphanumeric
       characters.
     Description: The WordPress database admin account username
-    Default: a4lwordpress
+    Default: clarusway
     MaxLength: '16'
     MinLength: '1'
     Type: String
@@ -174,7 +175,6 @@ Conditions:
   ResourceCreate: !Equals [ !Ref UseExistingReplicationTask, 'no']
 
 Resources:
-
   resDMSTaskSchedulerEventRule: 
     Condition: ScheduledMigration
     Type: AWS::Events::Rule
@@ -472,6 +472,7 @@ Resources:
       SnsTopicArn: !Ref resSnsTopicForDms
       SourceIds:
         - !If [ResourceCreate, !Ref ReplicationTaskIdentifier, !Ref ExistingDmsReplicationTaskName]
+
   onpremVPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -581,7 +582,7 @@ Resources:
     Type: AWS::EC2::Instance
     Properties:
       InstanceType: "t2.micro"
-      ImageId: "ami-0bf6ba120443f8e1f"
+      ImageId: "ami-01830c52e4dd62fa9"
       KeyName: !Ref MyKeypair
       IamInstanceProfile: !Ref onpremInstanceProfile
       SubnetId: !Ref onpremPublicSubnet
@@ -594,14 +595,37 @@ Resources:
         Fn::Base64: !Sub |
           #!/bin/bash -xe
           # Configure Wordpress
+          yum update -y
+          yum install git -y
+          cd /home/ec2-user
+          wget https://archives.fedoraproject.org/pub/archive/epel/6/x86_64/epel-release-6-8.noarch.rpm
+          rpm -ivh epel-release-6-8.noarch.rpm
+          yum --enablerepo=epel -y install sshpass
           cd /var/www/html
           cp ./wp-config-sample.php ./wp-config.php
           sed -i "s/'localhost'/'${onpremCatDB.PrivateIp}'/g" wp-config.php
           sed -i "s/'database_name_here'/'${DBName}'/g" wp-config.php
           sed -i "s/'username_here'/'${DBUser}'/g" wp-config.php
           sed -i "s/'password_here'/'${DBPassword}'/g" wp-config.php
+
+          cat >> /home/ec2-user/update_wp_ip.sh<< 'EOF'
+          #!/bin/bash
+          source <(php -r 'require("/var/www/html/wp-config.php"); echo("DB_NAME=".DB_NAME."; DB_USER=".DB_USER."; DB_PASSWORD=".DB_PASSWORD."; DB_HOST=".DB_HOST); ')
+          SQL_COMMAND="mysql -u $DB_USER -h $DB_HOST -p$DB_PASSWORD $DB_NAME -e"
+          OLD_URL=$(mysql -u $DB_NAME -h $DB_HOST -p$DB_PASSWORD $DB_NAME -e 'select option_value from wp_options where option_id = 1;' | grep http)
+          HOST=$(curl http://169.254.169.254/latest/meta-data/public-hostname)
+          $SQL_COMMAND "UPDATE wp_options SET option_value = replace(option_value, '$OLD_URL', 'http://$HOST') WHERE option_name = 'home' OR option_name = 'siteurl';"
+          $SQL_COMMAND "UPDATE wp_posts SET guid = replace(guid, '$OLD_URL','http://$HOST');"
+          $SQL_COMMAND "UPDATE wp_posts SET post_content = replace(post_content, '$OLD_URL', 'http://$HOST');"
+          $SQL_COMMAND "UPDATE wp_postmeta SET meta_value = replace(meta_value,'$OLD_URL','http://$HOST');"
+          EOF
+
+          chmod 755 /home/ec2-user/update_wp_ip.sh
+          chown root /etc/rc.local
+          chmod 755 /etc/rc.local
+          echo "/home/ec2-user/update_wp_ip.sh" >> /etc/rc.local
           /home/ec2-user/update_wp_ip.sh
-          yum -y install sshpass
+          
           cd /var/www/
           sshpass -p "${DBPassword}" scp -o StrictHostKeyChecking=no -rp html ec2-user@${awsCatWeb.PrivateIp}:/home/ec2-user
           
@@ -615,7 +639,7 @@ Resources:
     Properties:
       InstanceType: "t2.micro"
       KeyName: !Ref MyKeypair
-      ImageId: "ami-0319a571f9ff661d7"
+      ImageId: "ami-08fa2f21134ce466b"
       IamInstanceProfile: !Ref onpremInstanceProfile
       SubnetId: !Ref onpremPublicSubnet
       SecurityGroupIds: 
@@ -882,7 +906,7 @@ Resources:
               sed -ie 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
               echo '${DBPassword}' | passwd ec2-user --stdin
               systemctl restart sshd.service
-              sleep 100
+              sleep 300
               cd /home/ec2-user/html
               cp * -R /var/www/html/
               usermod -a -G apache ec2-user   
@@ -891,10 +915,10 @@ Resources:
               find /var/www -type d -exec chmod 2775 {} \;
               find /var/www -type f -exec chmod 0664 {} \;
               systemctl restart httpd
-              sleep 100
               cd /var/www/html
               sed -i "s/'${onpremCatDB.PrivateIp}'/'${MyDBURI}'/g" wp-config.php
 
+              sleep 100
               cat >> /home/ec2-user/update_wp_ip.sh<< 'EOF'
               #!/bin/bash
               source <(php -r 'require("/var/www/html/wp-config.php"); echo("DB_NAME=".DB_NAME."; DB_USER=".DB_USER."; DB_PASSWORD=".DB_PASSWORD."; DB_HOST=".DB_HOST); ')
@@ -905,6 +929,41 @@ Resources:
               $SQL_COMMAND "UPDATE wp_posts SET guid = replace(guid, '$OLD_URL','http://$HOST');"
               $SQL_COMMAND "UPDATE wp_posts SET post_content = replace(post_content, '$OLD_URL', 'http://$HOST');"
               $SQL_COMMAND "UPDATE wp_postmeta SET meta_value = replace(meta_value,'$OLD_URL','http://$HOST');"
+              $SQL_COMMAND "DELETE FROM wp_termmeta  WHERE meta_id=0;"
+              $SQL_COMMAND "DELETE FROM wp_terms  WHERE term_id=0;"
+              $SQL_COMMAND "DELETE FROM wp_term_taxonomy  WHERE term_taxonomy_id=0;"
+              $SQL_COMMAND "DELETE FROM wp_commentmeta  WHERE meta_id=0;"
+              $SQL_COMMAND "DELETE FROM wp_comments  WHERE comment_ID=0;"
+              $SQL_COMMAND "DELETE FROM wp_links  WHERE link_id=0;"
+              $SQL_COMMAND "DELETE FROM wp_options  WHERE option_id=0;"
+              $SQL_COMMAND "DELETE FROM wp_postmeta  WHERE meta_id=0;"
+              $SQL_COMMAND "DELETE FROM wp_users  WHERE ID=0;"
+              $SQL_COMMAND "DELETE FROM wp_posts  WHERE ID=0;"
+              $SQL_COMMAND "DELETE FROM wp_usermeta  WHERE umeta_id=0;"
+
+              $SQL_COMMAND "ALTER TABLE  wp_termmeta ADD PRIMARY KEY(meta_id);"
+              $SQL_COMMAND "ALTER TABLE  wp_terms ADD PRIMARY KEY(term_id);"
+              $SQL_COMMAND "ALTER TABLE  wp_term_taxonomy ADD PRIMARY KEY(term_taxonomy_id);"
+              $SQL_COMMAND "ALTER TABLE  wp_commentmeta ADD PRIMARY KEY(meta_id);"
+              $SQL_COMMAND "ALTER TABLE  wp_comments ADD PRIMARY KEY(comment_ID);"
+              $SQL_COMMAND "ALTER TABLE  wp_links ADD PRIMARY KEY(link_id);"
+              $SQL_COMMAND "ALTER TABLE  wp_options ADD PRIMARY KEY(option_id);"
+              $SQL_COMMAND "ALTER TABLE  wp_postmeta ADD PRIMARY KEY(meta_id);"
+              $SQL_COMMAND "ALTER TABLE  wp_users ADD PRIMARY KEY(ID);"
+              $SQL_COMMAND "ALTER TABLE  wp_posts ADD PRIMARY KEY(ID);"
+              $SQL_COMMAND "ALTER TABLE  wp_usermeta ADD PRIMARY KEY(umeta_id);"
+
+              $SQL_COMMAND "ALTER TABLE wp_termmeta CHANGE meta_id meta_id  BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT;"
+              $SQL_COMMAND "ALTER TABLE wp_terms CHANGE term_id term_id  BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT;"
+              $SQL_COMMAND "ALTER TABLE wp_term_taxonomy CHANGE term_taxonomy_id term_taxonomy_id  BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT;"
+              $SQL_COMMAND "ALTER TABLE wp_commentmeta CHANGE meta_id meta_id  BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT;"
+              $SQL_COMMAND "ALTER TABLE wp_comments CHANGE comment_ID comment_ID  BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT;"
+              $SQL_COMMAND "ALTER TABLE wp_links CHANGE link_id link_id  BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT;"
+              $SQL_COMMAND "ALTER TABLE wp_options CHANGE option_id option_id  BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT;"
+              $SQL_COMMAND "ALTER TABLE wp_postmeta CHANGE meta_id meta_id  BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT;"
+              $SQL_COMMAND "ALTER TABLE wp_users CHANGE ID ID  BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT;"
+              $SQL_COMMAND "ALTER TABLE wp_posts CHANGE ID ID  BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT;"
+              $SQL_COMMAND "ALTER TABLE wp_usermeta CHANGE umeta_id umeta_id  BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT;"
               EOF
 
               chmod 755 /home/ec2-user/update_wp_ip.sh
@@ -912,6 +971,7 @@ Resources:
               chmod 755 /etc/rc.local
               echo "/home/ec2-user/update_wp_ip.sh" >> /etc/rc.local
               /home/ec2-user/update_wp_ip.sh
+
             - MyDBURI: !GetAtt MyDatabaseServer.Endpoint.Address
 
 
@@ -979,7 +1039,7 @@ Resources:
             \"EnableLogging\": true
           }
       }"
-      TableMappings: "{ \"rules\": [ { \"rule-type\": \"selection\", \"rule-id\": \"1\", \"rule-name\": \"1\", \"object-locator\": { \"schema-name\": \"a4lwordpress\", \"table-name\": \"%\" }, \"rule-action\": \"include\" } ] }" #required
+      TableMappings: "{ \"rules\": [ { \"rule-type\": \"selection\", \"rule-id\": \"1\", \"rule-name\": \"1\", \"object-locator\": { \"schema-name\": \"%\", \"table-name\": \"%\" }, \"rule-action\": \"include\" } ] }" #required
       TargetEndpointArn: !Ref MyReplicationTargetInstanceEndpoint #required
 
 
@@ -994,20 +1054,4 @@ Outputs:
       - http://${PublicAddress}
       - PublicAddress: !GetAtt awsCatWeb.PublicDnsName
     Description: DMS Application URL
-  CloudWatchEventRule:
-    Condition: ScheduledMigration
-    Description: Cloudwatch event rule which schedules the data migrtion/refresh
-    Value: !Ref resDMSTaskSchedulerEventRule
-  SnsTopicName:
-    Condition: ScheduledMigration
-    Description: SNS Topic subscribed to AWS DMS events
-    Value: !GetAtt
-      - resSnsTopicForDms
-      - TopicName
-  TaskStarterLambda:
-    Description: Lambda function which triggers the DMS task
-    Value: !Ref resDmsTaskStarterLambda
-  PostProcessorLambda:
-    Condition: ScheduledMigration
-    Description: Lambda function which performs the post processing data activities
-    Value: !Ref resDataProcessEventEnableLambda
+ 
