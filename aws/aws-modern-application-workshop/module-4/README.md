@@ -1,6 +1,6 @@
 # Module 4: Adding User and API features with Amazon API Gateway and AWS Cognito
 
-![Architecture](/images/module-4/architecture-module-4.png)
+![Architecture](../images/module-4/architecture-module-4.png)
 
 **Time to complete:** 60 minutes
 
@@ -141,7 +141,7 @@ In this new index.html file, you'll notice additional HTML and JavaScript code t
 
 In this file, replace the strings **REPLACE_ME** inside the single quotes with the OutputValues you copied from above and save the file:
 
-![before-replace](/images/module-4/before-replace.png)
+![before-replace](../images/module-4/before-replace.png)
 
 Also, for the user registration process, you have an additional two HTML files to insert these values into.  `register.html` and `confirm.html`.  Insert the copied values into the **REPLACE_ME** strings in these files as well.
 

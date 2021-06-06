@@ -1,6 +1,6 @@
 # Module 7: Using Machine Learning to Recommend a Mysfit
 
-![Architecture](/images/module-7/sagemaker-architecture.png)
+![Architecture](../images/module-7/sagemaker-architecture.png)
 
 **Time to complete:** 45 minutes
 
@@ -54,12 +54,12 @@ Then, click on **Notebook Instances.**
 
 Click the radio button next to the **MythicalMysfits-SageMaker-Notebook** instance that you just created via the CLI, and click **Open Jupyter.**  This will redirect you to the Jupyter Notebook application running on your notebook instance.  
 
-![SageMaker Notebook Instances](/images/module-7/sagemaker-notebook-instances.png)
+![SageMaker Notebook Instances](../images/module-7/sagemaker-notebook-instances.png)
 
 **NOTE**: that for this workshop, we have created the notebook instance to allow you access it directly via the Internet, running in a service-managed VPC.  For more details about accessing a notebook instance through a VPC Interface Endpoint, should you desire to for a future use case, visit [this documentation page.](https://docs.aws.amazon.com/sagemaker/latest/dg/notebook-interface-endpoint.html).
 
 With Jupyter open, you will be presented with the following home page for your notebook instance:
-![Jupyter Home](/images/module-7/jupyter-home.png)
+![Jupyter Home](../images/module-7/jupyter-home.png)
 
 Click the **Upload** button, and then find the file you downloaded in the previous section `mysfit_recommendations_knn.ipynb`, then click **Upload** on the file line.   This will create a new Notebook document on the notebook instance within Jupyter that uses the notebook file you've just uploaded.
 
@@ -152,7 +152,7 @@ You're now ready to integrate this new backend functionality into the Mythical M
 
 A new `index.html` file has been included in Module 7 that contain the code required to present users with the Mysfit Recommendation questionnaire and present them with their recommended Mysfit.
 
-![Recommendation Button SS](/images/module-7/recommendation-button-ss.png)
+![Recommendation Button SS](../images/module-7/recommendation-button-ss.png)
 
 Remember that you'll need to copy the existing values from previous modules and insert them as required for the existing websites functionality.
 

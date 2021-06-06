@@ -1,6 +1,6 @@
 # Module 6: Tracing Application Requests
 
-![Architecture](/images/module-6/x-ray-arch-diagram.png)
+![Architecture](../images/module-6/x-ray-arch-diagram.png)
 
 **Time to complete:** 45 minutes
 
@@ -83,7 +83,7 @@ aws cloudformation describe-stacks --stack-name MythicalMysfitsQuestionsService-
 ```
 
 Next, visit the email address provided and CONFIRM your subscription to the SNS topic:
-![SNS Confirm](/images/module-6/confirm-sns.png)
+![SNS Confirm](../images/module-6/confirm-sns.png)
 
 
 Now, with the new backend service running, let's make the required changes to `index.html` so that the frontend can include the new *Contact Us* button.  Open `~/environment/aws-modern-application-workshop/module-6/web/index.html`  and insert the API endpoint for the new Questions API, retrieve the output value of `REPLACE_ME_QUESTIONS_API_ENDPOINT` from the above CloudFormation stack (located at `~/environment/questions-service-output.json`).  **Remember that you'll also need to paste the same values that you previously used prior to this module for the other Mysfits microservices endpoints and user pool.**
@@ -104,7 +104,7 @@ Now, to start seeing the request behavior for this microservice, visit the AWS X
 
 Upon visiting the X-Ray Console you'll be immediately viewing a **service map**, which shows the dependency relationship between all the components that X-Ray receives **trace segments** for:  
 
-![X-Ray Lambda Only](/images/module-6/lambda-only-x-ray.png)
+![X-Ray Lambda Only](../images/module-6/lambda-only-x-ray.png)
 
 At first, this service map only includes our AWS Lambda functions.  Feel free to explore the X-Ray console to learn more about drilling into the data automatically made visible just by listing the `Tracing: Active` property in the CloudFormation template you deployed.
 
@@ -118,7 +118,7 @@ aws apigateway update-stage --rest-api-id REPLACE_ME_QUESTIONS_REST_API_ID --sta
 
 Now, submit another question to the Mythical Mysfits website and you'll see that the REST API is also included in the service map!
 
-![API Gateway Traced](/images/module-6/api-x-ray.png)
+![API Gateway Traced](../images/module-6/api-x-ray.png)
 
 Next, you will use the [AWS X-Ray SDK for Python](https://docs.aws.amazon.com/xray/latest/devguide/xray-sdk-python.html) so that the services being called by the two Lambda functions as part of the questions stack are also represented in the X-Ray service map.  The code has been written already to accomplish this, you just need to uncomment the relevant lines (uncommenting is performed by deleting the preceding `#` in a line of python code).  In the Lambda function code, you will see comments that indicate `#UNCOMMENT_BEFORE_2ND_DEPLOYMENT` or `#UNCOMMENT_BEFORE_3RD_DEPLOYMENT`.  
 
@@ -143,7 +143,7 @@ aws cloudformation deploy --template-file /home/ec2-user/environment/MythicalMys
 
 Once that command completes, submit an additional question to the Mythical Mysfits website and take a look at the X-Ray console again. Now you're able to trace how Lambda is interacting with DynamoDB as well as SNS!
 
-![Services X-Ray](/images/module-6/services-x-ray.png)
+![Services X-Ray](../images/module-6/services-x-ray.png)
 
 The final step in this module is to familiarize yourself with using AWS X-Ray to triage problems in your application.  To accomplish this, we're going to by *mysfits* ourselves and have you add some terrible code to your application.  All this code will do is cause your web service to add 5 seconds of latency and throw an exception for randomized requests :) .
 
@@ -160,15 +160,15 @@ After you've issued those two commands, submit another few questions on your Mys
 
 If you visit the X-Ray console again, you'll notice that the service map for the MysfitPostQuestionsFunction Lambda function has a ring around it that is no longer only Green. That's because Error responses have been generated there.  X-Ray will give you this visual representation of overall service health across all of the instrumented services in your service map:
 
-![X-Ray Errors](/images/module-6/x-ray-errors.png)
+![X-Ray Errors](../images/module-6/x-ray-errors.png)
 
 If you click on that service within the service map, you'll notice on the right side of the X-Ray console, you have the ability to view the traces that either match the highlighted overall latency shown within the service latency graph and/or the status code you're interested in.  Zoom the latency graph so that the blip around 5 seconds is within the graph and/or select the Error check box and click **View traces**:
 
-![View Traces](/images/module-6/view-traces.png)
+![View Traces](../images/module-6/view-traces.png)
 
 This will take you to the Trace dashboard where you can explore that specific requests lifecycle, see the latency spend on each segment of the service, and view the exception reported and associated stack trace. Click on any of the IDs for the Traces where the response is reported as a 502, then on the subsequent **Trace Details** page, click on the **hangingException** to view that specific subsegment where the exception was thrown in our code:
 
-![Exception](/images/module-6/exception.png)
+![Exception](../images/module-6/exception.png)
 
 Congratulations, you've completed module 6!
 

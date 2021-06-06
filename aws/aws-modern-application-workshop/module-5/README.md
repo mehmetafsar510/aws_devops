@@ -1,6 +1,6 @@
 # Module 5: Capturing User Behavior
 
-![Architecture](/images/module-5/architecture-module-5.png)
+![Architecture](../images/module-5/architecture-module-5.png)
 
 **Time to complete:** 30 minutes
 
@@ -89,7 +89,7 @@ Once this command completes, you will see several additional python package fold
 #### Update the Lambda Function Code
 Next, we have one code change to make prior to our Lambda function code being completely ready for deployment.  There is a line within the `streamProcessor.py` file that needs to be replaced with the ApiEndpoint for your Mysfits service API - the same service ApiEndpoint that you created in module-4 and used on the website frontend.  Be sure to update the file you have copied into the new StreamingService repository directory.
 
-![replace me](/images/module-5/replace-api-endpoint.png)
+![replace me](../images/module-5/replace-api-endpoint.png)
 
 That service is responsible for integrating with the MysfitsTable in DynamoDB, so even though we could write a Lambda function that directly integrated with the DynamoDB table as well, doing so would intrude upon the purpose of the first microservice and leave us with multiple/separate code bases that integrated with the same table.  Instead, we will integrate with that table through the existing service and have a much more decoupled and modular application architecture.
 
