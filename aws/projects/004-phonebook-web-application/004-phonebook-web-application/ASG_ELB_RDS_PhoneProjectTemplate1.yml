@@ -157,13 +157,13 @@ Resources:
               pip3 install mysql-connector-python
               echo "${MyDatabaseInstance.Endpoint.Address}" > /home/ec2-user/dbserver.endpoint
               cd /home/ec2-user
-              wget https://raw.githubusercontent.com/mehmetafsar510/aws_devops/master/aws/projects/proje/phonebook-app.py
-              wget https://raw.githubusercontent.com/mehmetafsar510/aws_devops/master/aws/projects/proje/init-phonebook-db.py
-              mkdir templates
-              cd templates
-              wget https://raw.githubusercontent.com/mehmetafsar510/aws_devops/master/aws/projects/proje/templates/add-update.html
-              wget https://raw.githubusercontent.com/mehmetafsar510/aws_devops/master/aws/projects/proje/templates/delete.html
-              wget https://raw.githubusercontent.com/mehmetafsar510/aws_devops/master/aws/projects/proje/templates/index.html
+              wget https://raw.githubusercontent.com/mehmetafsar510/aws_devops/master/aws/projects/004-phonebook-web-application/phonebook-app.py
+              wget https://raw.githubusercontent.com/mehmetafsar510/aws_devops/master/aws/projects/004-phonebook-web-application/init-phonebook-db.py
+              mkdir -p  /home/ec2-user/templates
+              cd /home/ec2-user/templates
+              wget https://github.com/mehmetafsar510/aws_devops/blob/master/aws/projects/004-phonebook-web-application/templates/add-update.html
+              wget https://raw.githubusercontent.com/mehmetafsar510/aws_devops/master/aws/projects/004-phonebook-web-application/templates/delete.html
+              wget https://github.com/mehmetafsar510/aws_devops/blob/master/aws/projects/004-phonebook-web-application/templates/index.html
               cd ..
               python3 phonebook-app.py
   MyAutoScalingGroup:
