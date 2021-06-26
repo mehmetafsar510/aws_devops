@@ -1,0 +1,22 @@
+#------ cloudfront/variables.tf ---
+
+variable "domain_name" {}
+variable "origin_id" {}
+variable "origin_protocol_policy" {}
+variable "http_port" {}
+variable "https_port" {}
+variable "origin_keepalive_timeout" {}
+variable "origin_ssl_protocols" {}
+variable "viewer_protocol_policy" {}
+variable "allowed_methods" {}
+variable "cached_methods" {}
+variable "minimum_protocol_version" {}
+variable "headers" {}
+variable "acm_certificate_arn" {}
+variable "ssl_support_method" {}
+variable "restriction_type" {}
+variable "compress" {}
+variable "cookies_forward" {}
+variable "query_string" {}
+variable "enabled" {}
+variable "aliases" {}
