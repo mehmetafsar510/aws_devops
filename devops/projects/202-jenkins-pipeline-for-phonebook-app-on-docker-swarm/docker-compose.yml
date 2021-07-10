@@ -3,11 +3,14 @@ version: "3.7"
 services:
   database:
     image: mysql:5.7
+    secrets:
+      - db_root_password
+      - db_dba_password
     environment:
-      MYSQL_ROOT_PASSWORD: P123456p
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
       MYSQL_DATABASE: phonebook_db
       MYSQL_USER: admin
-      MYSQL_PASSWORD: Clarusway_1
+      MYSQL_PASSWORD_FILE: /run/secrets/db_dba_password
     volumes:
       - db-data:/var/lib/mysql
     networks:
@@ -17,7 +20,7 @@ services:
         target: /docker-entrypoint-initdb.d/init.sql
 
   app-server:
-    image: 046402772087.dkr.ecr.us-east-1.amazonaws.com/clarusway-repo/phonebook-app:latest
+    image: "${ECR_REGISTRY}/${APP_REPO_NAME}:latest"
     deploy:
       mode: global
       update_config:
@@ -35,6 +38,12 @@ networks:
 
 volumes:
   db-data:
+
+secrets:
+  db_root_password:
+    file: database/db_root_password.txt
+  db_dba_password:
+    file: database/db_dba_password.txt
 
 configs:
   initialdatabase:
