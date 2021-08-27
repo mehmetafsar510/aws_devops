@@ -10,8 +10,6 @@ My goal is to migrate an existing site with the following properties:
     ensure that both the apex domain (mehmetafsar.com) and the www subdomain both work over https;
 
 
-## Problem Statement
-
 ![Project_004](azure1.png)
 
 - To make everything work, we’re going to proceed with these steps with Terraform
