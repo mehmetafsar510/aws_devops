@@ -1,0 +1,6 @@
+---
+# vars file for postgres
+postgre_home: /home/ec2-user/solution/postgre_files
+postgre_container: /home/ec2-user/postgresql
+container_name: mehmet_postgre
+image_name: mehmet/postgre

@@ -1,0 +1,5 @@
+---
+nodejs_home: /home/ec2-user/solution/nodejs_files
+container_path: /home/ec2-user/nodejs
+container_name: mehmet_nodejs
+image_name: mehmet/nodejs

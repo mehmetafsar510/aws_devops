@@ -1,0 +1,48 @@
+- name: Remove docker if installed froCentOS repo
+  yum:
+    name: "{{ item }}"
+    state: removed
+  with_items:
+    - docker
+    - docker-client
+    - docker-client-latest
+    - docker-common
+    - docker-latest
+    - docker-latest-logrotate
+    - docker-logrotate
+    - docker-engine
+- name: Install yum utils
+  yum: 
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - yum-utils
+    - device-mapper-persistent-data
+    - lvm2
+- name: Add Docker repo  # Bu task 1nci ve 2nci çözüm yöntemlerinde sağlıklı çalışırken nedense bu 3ncü yöntemde role tanımına geçince hata veriyor. Bu sebepten failed_when: false ekledim ama sağlıklı da değil. Neden olduğuna bakılması lazım!!!
+  get_url:
+    url: https://download.docker.com/linucentos/docker-ce.repo
+    dest: /etc/yum.repos.d/docer-ce.repo
+  failed_when: false
+- name: Install Docker
+  package:
+    name: docker-ce
+    state: latest
+- name: Install pip
+  package:
+    name: python3-pip
+    state: present
+    update_cache: true
+- name: Install docker sdk
+  pip:
+    name: docker
+- name: Add user ec2-user to docker group
+  user:
+    name: ec2-user
+    groups: docker
+    append: yes
+- name: Start Docker service
+  service:
+    name: docker
+    state: started
+    enabled: yes

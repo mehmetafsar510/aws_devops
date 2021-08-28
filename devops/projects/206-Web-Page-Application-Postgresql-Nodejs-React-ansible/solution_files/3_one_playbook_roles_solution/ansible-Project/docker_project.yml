@@ -1,0 +1,30 @@
+- name: Docker install and configuration
+  gather_facts: No
+  any_errors_fatal: true
+  hosts: _development
+  become: yes
+  roles: 
+    - docker
+- name: Postgre Database configuration
+  hosts: _ansible_postgresql
+  become: true
+  vars_files:
+    - secret.yml
+  gather_facts: No
+  any_errors_fatal: true
+  roles:
+    - postgres
+- name: Nodejs server configuration
+  hosts: _ansible_nodejs
+  become: true
+  gather_facts: No
+  any_errors_fatal: true
+  roles:
+    - nodejs
+- name: React UI Server configuration
+  hosts: _ansible_react
+  become: true
+  gather_facts: No
+  any_errors_fatal: true
+  roles:
+    - react

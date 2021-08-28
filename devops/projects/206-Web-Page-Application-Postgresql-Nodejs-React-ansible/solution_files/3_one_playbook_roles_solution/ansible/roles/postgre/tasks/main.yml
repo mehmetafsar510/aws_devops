@@ -1,0 +1,39 @@
+---
+# tasks file for /home/ec2-user/ansible/roles/postgre
+- name: create build directory
+  file:
+    path: "{{ postgre_container }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+# https://stackoverflow.com/questions/35487756/how-to-copy-files-with-ansible-relatively-to-the-role
+- name: copy the sql script
+  copy:
+    src: init.sql
+    dest: "{{ postgre_container }}"
+- name: copy the Dockerfile
+  copy:
+    src: Dockerfile
+    dest: "{{ postgre_container }}" 
+- name: remove {{ container_name }} container and {{ image_name }} if exists
+  shell: "docker ps -q --filter 'name={container_name }}' | grep -q . && dockestop {{ container_name }} && docker rm -f{{ container_name }} && docker image rm -{{ image_name }} || echo 'Not Found'"
+- name: build container image
+  docker_image:
+    name: "{{ image_name }}"
+    build:
+      path: "{{ postgre_container }}"
+    source: build
+    state: present
+- name: Launch postgresql docker container
+  docker_container:
+    name: "{{ container_name }}"
+    image: "{{ image_name }}"
+    state: started
+    ports: 
+    - "5432:5432"
+    env:
+      POSTGRES_PASSWORD: "Pp123456789"
+    volumes:
+      - /custom/mount:/var/lib/postgresqdata
+  register: docker_info
