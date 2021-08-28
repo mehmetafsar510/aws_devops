@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deployment-db
+  labels:
+    app: deployment-db
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: db
+  template:
+    metadata:
+      labels:
+        name: db
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:5.7
+        ports:
+        - containerPort: 3306
+        args:
+        - "--ignore-db-dir=lost+found"
+        envFrom:
+          - configMapRef:
+              name: config-db
+          - secretRef:
+              name: secret-db
+           
+
+        volumeMounts:
+          - name: mysql-persistent-storage
+            mountPath: /var/lib/mysql
+      volumes:
+      - name: mysql-persistent-storage
+        persistentVolumeClaim:
+          claimName: clarus-pv-claim
+      #volumes:
+      #- name: test-volume
+    # #This AWS EBS volume must already exist.
+      #  awsElasticBlockStore:
+      #    volumeID: "{{EBS_VOLUME_ID}}"
+      #    fsType: ext4

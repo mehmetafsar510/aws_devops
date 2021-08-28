@@ -1,0 +1,14 @@
+{
+    "Comment": "Deleting Alias resource record sets in Route 53",
+    "Changes": [{
+               "Action": "DELETE",
+               "ResourceRecordSet": {
+                           "Name": "{{FQDN}}",
+                           "Type": "A",
+                           "AliasTarget":{
+                                   "HostedZoneId": "Z26RNL4JYFTOTI",
+                                   "DNSName": "{{DNS}}",
+                                   "EvaluateTargetHealth": false
+                             }}
+                         }]
+}

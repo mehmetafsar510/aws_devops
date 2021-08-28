@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deployment-app
+  labels:
+    name: deployment-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: app
+  template:
+    metadata:
+      labels:
+        name: app
+    spec:
+      containers:
+      - name: app
+        image: {{ECR_REGISTRY}}
+        ports:
+        - containerPort: 80
+        envFrom:
+          - configMapRef:
+              name: config-app
+          - secretRef:
+              name: secret-app

@@ -1,0 +1,8 @@
+apiVersion: v1 
+kind: ConfigMap 
+metadata:
+  name: config-app
+data:
+  MYSQL_DATABASE_HOST: service-db.{{ns}}
+  MYSQL_DATABASE_DB: "phonebook"
+  MYSQL_DATABASE_PORT: "3306"
