@@ -1,4 +1,4 @@
-# Hands-on Kubernetes-11 : Kubernetes Backup and Restore
+# Kubernetes Backup and Restore
 
 The purpose of this hands-on training is to give students the knowledge of taking backup and restoring a cluster from backup.
 
