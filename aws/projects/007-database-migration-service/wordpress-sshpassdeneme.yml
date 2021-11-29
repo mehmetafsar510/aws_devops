@@ -1,0 +1,290 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  This CloudFormation creates the VPC, DMS, RDS resources required for demonstrating the
+  automated serverless way to run DMS tasks for data migration. 
+Metadata:
+  LICENSE: Apache License Version 2.0
+
+Parameters:  
+  MyKeypair:
+    Description: My key pair
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: "the_doctor"
+  DomainName:
+    Type: AWS::Route53::HostedZone::Id
+    Description: The DNS name of an existing Amazon Route 53 hosted zone e.g. clarusway.us
+  FullDomainName:
+    Type: String
+    Description: The full domain name e.g. phonebook.clarusway.us
+    AllowedPattern: (?!-)[a-zA-Z0-9-.]{1,63}(?<!-)
+    ConstraintDescription: must be a valid DNS zone name.
+    Default: dms.mehmetafsar.net
+  OperatorEMail:
+    Description: EMail address to notify if there are any scaling operations
+    Type: String
+    AllowedPattern: ([a-zA-Z0-9_\-\.]+)@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.)|(([a-zA-Z0-9\-]+\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\]?)
+    ConstraintDescription: must be a valid email address.
+    Default: drmehmet510@gmail.com
+  DBName:
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric
+      characters.
+    Default: clarusway
+    Description: The WordPress database name
+    MaxLength: '64'
+    MinLength: '1'
+    Type: String
+  DBPassword:
+    AllowedPattern: '^[A-Za-z][a-zA-Z0-9@%$_-]{8,41}$'
+    ConstraintDescription: must contain only alphanumeric characters.
+    Description: The WordPress database admin account password
+    MaxLength: '41'
+    MinLength: '8'
+    Default: 'wordpress'
+    Type: String
+  DBRootPassword:
+    AllowedPattern: '^[A-Za-z][a-zA-Z0-9@%$_-]{8,41}$'
+    ConstraintDescription: must contain only alphanumeric characters.
+    Description: MySQL root password
+    Default: 'wordpress'
+    MaxLength: '41'
+    MinLength: '8'
+    Type: String
+  DBUser:
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric
+      characters.
+    Description: The WordPress database admin account username
+    Default: clarusway
+    MaxLength: '16'
+    MinLength: '1'
+    Type: String
+
+Resources:
+  awsSecurityGroupWeb:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Control access to the Web EC2 Instance
+      SecurityGroupIngress: 
+        - Description: 'Allow HTTP IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: '0.0.0.0/0'
+        - Description: 'Allow SSH IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: '0.0.0.0/0'
+        - Description: 'Allow MySQL IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: '0.0.0.0/0'    
+  onpremSecurityGroupWeb:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Control access to the Web EC2 Instance
+      SecurityGroupIngress: 
+        - Description: 'Allow HTTP IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: '0.0.0.0/0'
+        - Description: 'Allow HTTP IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: '0.0.0.0/0'
+  onpremSecurityGroupDB:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Control access to the DB EC2 Instance
+      SecurityGroupIngress: 
+        - Description: 'Allow MySQL IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: '0.0.0.0/0'
+        - Description: 'Allow HTTP IPv4 IN'
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: '0.0.0.0/0'
+  onpremCatWeb:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: "t2.micro"
+      ImageId: ami-08605c1d64895b172
+      KeyName: !Ref MyKeypair
+      SecurityGroupIds: 
+        - !Ref onpremSecurityGroupWeb
+      Tags:
+        - Key: Name
+          Value: ClaruswayWeb
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
+          yum update -y
+          yum install git -y
+          cd /home/ec2-user
+          wget https://archives.fedoraproject.org/pub/archive/epel/6/x86_64/epel-release-6-8.noarch.rpm
+          rpm -ivh epel-release-6-8.noarch.rpm
+          yum --enablerepo=epel -y install sshpass
+          cd /var/www/html
+          cp ./wp-config-sample.php ./wp-config.php
+          sed -i "s/'localhost'/'${onpremCatDB.PrivateIp}'/g" wp-config.php
+          sed -i "s/'database_name_here'/'${DBName}'/g" wp-config.php
+          sed -i "s/'username_here'/'${DBUser}'/g" wp-config.php
+          sed -i "s/'password_here'/'${DBPassword}'/g" wp-config.php
+          /home/ec2-user/update_wp_ip.sh
+          rm -rf /home/ec2-user/update_wp_ip.sh
+
+          cat >> /var/www/html/wp-config.php<< 'EOF'
+          define('WP_HOME','http://${FullDomainName}');
+          define('WP_SITEURL','http://${FullDomainName}');
+          EOF
+
+          wget -r --no-parent -A 'epel-release-*.rpm' https://dl.fedoraproject.org/pub/epel/7/x86_64/Packages/e/
+          rpm -Uvh dl.fedoraproject.org/pub/epel/7/x86_64/Packages/e/epel-release-*.rpm
+          yum-config-manager --enable epel*
+          yum repolist all
+          yum install -y certbot python2-certbot-apache
+
+          sh -c "cat >> /etc/httpd/conf.d/domain.conf<< 'EOF'
+          <VirtualHost *:80>
+          ServerName ${FullDomainName}
+          DocumentRoot /var/www/html
+          ServerAlias ${FullDomainName}
+          </VirtualHost>
+          EOF"
+
+          systemctl restart httpd
+          certbot --apache -d ${FullDomainName} --non-interactive --agree-tos -m ${OperatorEMail}
+
+          sed -i "s|'http://${FullDomainName}'|'https://${FullDomainName}'|g" /var/www/html/wp-config.php
+          systemctl restart httpd
+          
+          cat >> /home/ec2-user/update_wp_ip.sh<< 'EOF'
+          #!/bin/bash
+          source <(php -r 'require("/var/www/html/wp-config.php"); echo("DB_NAME=".DB_NAME."; DB_USER=".DB_USER."; DB_PASSWORD=".DB_PASSWORD."; DB_HOST=".DB_HOST); ')
+          SQL_COMMAND="mysql -u $DB_USER -h $DB_HOST -p$DB_PASSWORD $DB_NAME -e"
+          OLD_URL=$(mysql -u $DB_NAME -h $DB_HOST -p$DB_PASSWORD $DB_NAME -e 'select option_value from wp_options where option_id = 1;' | grep http)
+          HOST=${FullDomainName}
+          $SQL_COMMAND "UPDATE wp_options SET option_value = replace(option_value, '$OLD_URL', 'https://$HOST') WHERE option_name = 'home' OR option_name = 'siteurl';"
+          $SQL_COMMAND "UPDATE wp_posts SET guid = replace(guid, '$OLD_URL','https://$HOST');"
+          $SQL_COMMAND "UPDATE wp_posts SET post_content = replace(post_content, '$OLD_URL', 'https://$HOST');"
+          $SQL_COMMAND "UPDATE wp_postmeta SET meta_value = replace(meta_value,'$OLD_URL','https://$HOST');"
+          EOF
+          
+          chmod 755 /home/ec2-user/update_wp_ip.sh
+          /home/ec2-user/update_wp_ip.sh
+
+          cat >> /home/ec2-user/sshpass.sh<< 'EOF'
+          #!/bin/bash
+          
+          while :
+          do
+          	sshpass -p ${DBPassword} scp -o StrictHostKeyChecking=no -rp /var/www/html ec2-user@${awsCatWeb.PrivateIp}:/home/ec2-user
+          	if  [ $(sshpass -p ${DBPassword} ssh -o StrictHostKeyChecking=no  ec2-user@${awsCatWeb.PrivateIp} ls | grep -i html) == "html" ] 
+          	then
+          		  break
+          	fi
+          done
+          EOF
+          chmod 755 /home/ec2-user/sshpass.sh
+          /home/ec2-user/sshpass.sh        
+  
+  onpremCatDB:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+    Properties:
+      InstanceType: "t2.micro"
+      KeyName: !Ref MyKeypair
+      ImageId: ami-0eeda2ad398a2e245
+      SecurityGroupIds: 
+        - !Ref onpremSecurityGroupDB
+      Tags:
+        - Key: Name
+          Value: ClaruswayDB
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackId} --resource onpremCatDB --region ${AWS::Region}
+
+  DMSSERVERIP:
+    Type: AWS::EC2::EIP
+  IPAssoc:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      InstanceId: !Ref 'onpremCatWeb'
+      EIP: !Ref 'DMSSERVERIP'
+  
+  myDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId : !Ref DomainName
+      Name: !Ref FullDomainName
+      ResourceRecords: 
+      - !Ref DMSSERVERIP
+      TTL: 900
+      Type: A 
+
+  awsCatWeb:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: "t2.micro"
+      ImageId: "ami-0be2609ba883822ec"
+      KeyName: !Ref MyKeypair
+      SecurityGroupIds: 
+        - !Ref awsSecurityGroupWeb
+      Tags:
+        - Key: Name
+          Value: awsCatWeb
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
+          yum update -y
+          yum install -y httpd mariadb
+          amazon-linux-extras install -y php7.2
+          systemctl start httpd
+          systemctl enable httpd
+          sed -ie 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+          echo ${DBPassword} | passwd ec2-user --stdin
+          systemctl restart sshd.service
+          cat >> /home/ec2-user/migrate.sh<< 'EOF'
+          ##!/bin/bash
+          #while [ ! -d /home/ec2-user/html ]; do sleep 30; done
+          #!/bin/bash
+          while :
+          do
+          [ ! -d /home/ec2-user/html ]
+          if  [ $(ls /home/ec2-user/html | wc -l) == "20" ]
+          then
+              sleep 5
+              break
+          fi
+          done
+          EOF
+          chmod 755 /home/ec2-user/migrate.sh
+          /home/ec2-user/migrate.sh
+          cd /home/ec2-user/html
+          cp * -R /var/www/html
+          usermod -a -G apache ec2-user   
+          chown -R ec2-user:apache /var/www
+          chmod 2775 /var/www
+          find /var/www -type d -exec chmod 2775 {} \;
+          find /var/www -type f -exec chmod 0664 {} \;
+          systemctl restart httpd
+          
+            
+Outputs:
+  WebsiteURL:
+    Value: !Sub
+      - http://${PublicAddress}
+      - PublicAddress: !GetAtt onpremCatWeb.PublicDnsName
+    Description: DMS Application URL
