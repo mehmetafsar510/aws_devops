@@ -71,6 +71,24 @@ Parameters:
     MaxLength: '64'
     MinLength: '1'
     Type: String
+  SUPERUSERNAME:
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric
+      characters.
+    Description: Capstone database admin account username
+    Default: capstone
+    MaxLength: '16'
+    MinLength: '1'
+    Type: String
+  SUPERPASSWORD:
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric
+      characters.
+    Description: Capstone database admin account username
+    Default: capstone
+    MaxLength: '16'
+    MinLength: '1'
+    Type: String
   DBName:
     AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
     ConstraintDescription: must begin with a letter and contain only alphanumeric
@@ -171,14 +189,14 @@ Resources:
   CapstoneCertificate:
     Type: "AWS::CertificateManager::Certificate"
     Properties:
-      CertificateTransparencyLoggingPreference: DISABLED
-      DomainName:
-        Fn::Join:
-        - ""
-        - - '*.'
-          - !Select [1, !Split ['.', !Ref CapstoneSubDomainName]]
-          - '.'
-          - !Select [2, !Split ['.', !Ref CapstoneSubDomainName]] #required
+      CertificateTransparencyLoggingPreference: ENABLED
+      DomainName: !Ref CapstoneSubDomainName
+        #Fn::Join:
+        #- ""
+        #- - '*.'
+        #  - !Select [1, !Split ['.', !Ref CapstoneSubDomainName]]
+        #  - '.'
+        #  - !Select [2, !Split ['.', !Ref CapstoneSubDomainName]] #required
       ValidationMethod: DNS
       DomainValidationOptions:
         - DomainName: !Ref CapstoneSubDomainName
@@ -485,6 +503,7 @@ Resources:
       SourceArn: 
         Fn::Sub: arn:aws:s3:::${BucketName}-encryption-service
 
+
   CapstoneS3Cloudfront:
     Type: AWS::CloudFront::Distribution
     Properties:
@@ -493,6 +512,8 @@ Resources:
         Origins:
         - DomainName: !GetAtt myS3Bucket.DomainName
           Id: Bucket
+          CustomOriginConfig: 
+            OriginProtocolPolicy: match-viewer 
         Enabled: true
         
         DefaultCacheBehavior:
@@ -506,7 +527,6 @@ Resources:
             QueryString: true
             Cookies:
               Forward: all
-            Headers: none
           AllowedMethods:
           - GET
           - HEAD
@@ -537,8 +557,6 @@ Resources:
               - DELETE
             AllowedOrigins:
               - '*'
-            ExposedHeaders:
-              - []
       BucketName: 
         Fn::Sub: ${BucketName}-encryption-service
       NotificationConfiguration:
@@ -565,6 +583,8 @@ Resources:
               - ""
               - - !GetAtt myS3Bucket.Arn
                 - "/*"
+
+
   MyDynamoDB:
     Type: "AWS::DynamoDB::Table"
     DeletionPolicy: Delete
@@ -633,16 +653,21 @@ Resources:
                 apt-get update -y
                 apt-get install git -y
                 apt-get install python3 -y
+                apt install unzip -y
+                curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                unzip awscliv2.zip
+                ./aws/install
                 cd /home/ubuntu/
-                TOKEN="XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-                git clone <YOUR GITHUB REPO URL>
-                cd /home/ubuntu/<YOUR GITHUB REPO NAME>
+                git clone https://github.com/mehmetafsar510/Blog-Page-Application-Django-deployed-on-AWS.git
+                cd /home/ubuntu/Blog-Page-Application-Django-deployed-on-AWS
                 apt install python3-pip -y
                 apt-get install python3.7-dev libmysqlclient-dev -y
                 pip3 install -r requirements.txt
-                cd /home/ubuntu/<YOUR GITHUB REPO NAME>/src
+                cd /home/ubuntu/Blog-Page-Application-Django-deployed-on-AWS/S3_Static_Website
+                /usr/local/bin/aws s3 sync . s3://${CapstoneSubDomainName}
+                cd /home/ubuntu/Blog-Page-Application-Django-deployed-on-AWS/src
                 sed -i "s/'your DB password without any quotes'/${DBPassword}/g" .env
-                cd /home/ubuntu/<YOUR GITHUB REPO NAME>/src/cblog
+                cd /home/ubuntu/Blog-Page-Application-Django-deployed-on-AWS/src/cblog
                 sed -i "s/'database name in RDS is written here'/'${DBName}'/g" settings.py
                 sed -i "s/'database master username in RDS is written here'/'${DBUser}'/g" settings.py
                 sed -i "s/'database endpoint is written here'/'${MyDBURI}'/g" settings.py
@@ -650,10 +675,11 @@ Resources:
                 sed -i "s/'please enter your s3 bucket name'/'${BucketName}-encryption-service'/g" settings.py
                 sed -i "s/'please enter your s3 region'/'${AWS::Region}'/g" settings.py
                 sed -i "s/'please enter your s3 cloudfront'/'${MyCFURI}'/g" settings.py
-                cd /home/ubuntu/<YOUR GITHUB REPO NAME>/src
+                cd /home/ubuntu/Blog-Page-Application-Django-deployed-on-AWS/src
                 python3 manage.py collectstatic --noinput
                 python3 manage.py makemigrations
                 python3 manage.py migrate
+                DJANGO_SUPERUSER_USERNAME=${SUPERUSERNAME} DJANGO_SUPERUSER_PASSWORD=${SUPERPASSWORD} python3 manage.py createsuperuser --noinput --email '${OperatorEMail}'
                 python3 manage.py runserver 0.0.0.0:80
               - MyDBURI: !GetAtt MyDatabaseServer.Endpoint.Address
                 MyCFURI: !GetAtt CapstoneS3Cloudfront.DomainName
