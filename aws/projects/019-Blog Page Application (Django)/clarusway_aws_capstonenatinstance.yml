@@ -834,7 +834,10 @@ Resources:
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
-    DependsOn: VPC
+    Properties:
+      Tags:
+        - Key: Name
+          Value:  !Join ['', [!Ref "AWS::StackName", "-IGW" ]]
   
   AttachGateway:
     Type: AWS::EC2::VPCGatewayAttachment
