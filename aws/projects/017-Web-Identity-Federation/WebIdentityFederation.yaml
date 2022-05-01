@@ -10,13 +10,13 @@ Parameters:
     Description: The full domain name e.g. capstone.clarusway.us
     AllowedPattern: (?!-)[a-zA-Z0-9-.]{1,63}(?<!-)
     ConstraintDescription: must be a valid DNS zone name.
-    Default:        cognito.mehmetafsar.com
+    Default:        cognito.mehmetafsar.net
   CognitoEc2Domain:
     Type: String
     Description: The full domain name e.g. capstone.clarusway.us
     AllowedPattern: (?!-)[a-zA-Z0-9-.]{1,63}(?<!-)
     ConstraintDescription: must be a valid DNS zone name.
-    Default:        clarusway.mehmetafsar.com
+    Default:        clarusway.mehmetafsar.net
   CognitoDomain:
     Type: String
     MinLength: 3
@@ -86,6 +86,10 @@ Resources:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
           CidrIp: 0.0.0.0/0
   Ec2Role:
     Type: AWS::IAM::Role
@@ -371,8 +375,8 @@ Resources:
       AttributeMapping:
         email: drmehmet510@gmail.com
       ProviderDetails:
-        client_id: 956064605870-q7gtbpeb8l0gnqalbs8f98s80gs9jac4.apps.googleusercontent.com
-        client_secret: WmIRi0BmChQxMWJaLOCqmjyF
+        client_id: 196241540610-qbm06dq2rvfh6aeirabaua38206uq27l.apps.googleusercontent.com
+        client_secret: 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
         authorize_scopes: email openid
       ProviderType: Google
       UserPoolId: 
@@ -382,7 +386,7 @@ Resources:
     Type: "AWS::Cognito::IdentityPool"
     Properties:
      "AllowUnauthenticatedIdentities": false
-     "SupportedLoginProviders": { "accounts.google.com": "956064605870-q7gtbpeb8l0gnqalbs8f98s80gs9jac4.apps.googleusercontent.com" }
+     "SupportedLoginProviders": { "accounts.google.com": "196241540610-qbm06dq2rvfh6aeirabaua38206uq27l.apps.googleusercontent.com" }
 
   CognitoIdentityPoolRoleAttachment:
     Type: AWS::Cognito::IdentityPoolRoleAttachment
